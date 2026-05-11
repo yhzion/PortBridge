@@ -29,6 +29,11 @@ struct ForwardingRowView: View {
         }
     }
 
+    private var isErrorState: Bool {
+        if case .error = forwarding?.state { return true }
+        return false
+    }
+
     private var statusSymbol: (name: String, color: Color) {
         switch forwarding?.state {
         case .active:        return ("circle.fill", .green)
@@ -58,7 +63,7 @@ struct ForwardingRowView: View {
                 }
                 Text(stateLabel ?? addressLabel)
                     .font(.caption)
-                    .foregroundStyle(forwarding?.state == .error ? .red : .secondary)
+                    .foregroundStyle(isErrorState ? .red : .secondary)
                     .lineLimit(1)
             }
 
