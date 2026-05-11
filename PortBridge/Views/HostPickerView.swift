@@ -16,6 +16,10 @@ struct HostPickerView: View {
             }
             .labelsHidden()
             .frame(maxWidth: 200)
+            .onChange(of: vm.selectedHost) { _, newHost in
+                guard newHost != nil else { return }
+                Task { await vm.scan() }
+            }
 
             Button {
                 Task { await vm.scan() }
@@ -25,11 +29,14 @@ struct HostPickerView: View {
                         ProgressView().controlSize(.small)
                         Text("검색 중…")
                     }
-                } else {
+                } else if vm.ports.isEmpty {
                     Label("포트 검색", systemImage: "magnifyingglass")
+                } else {
+                    Label("새로고침", systemImage: "arrow.clockwise")
                 }
             }
             .disabled(vm.selectedHost == nil || vm.isScanning)
+            .help(vm.ports.isEmpty ? "선택한 서버의 포트를 스캔합니다" : "포트 목록을 다시 불러옵니다")
 
             Spacer()
         }

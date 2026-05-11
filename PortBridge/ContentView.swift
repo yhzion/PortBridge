@@ -6,17 +6,20 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 12) {
             HostPickerView(vm: vm)
-            Divider()
+
             if vm.hosts.isEmpty {
+                Divider()
                 ContentUnavailableView(
                     "등록된 SSH 호스트가 없습니다",
                     systemImage: "network.slash",
                     description: Text(vm.lastError ?? "~/.ssh/config에 Host 항목을 추가하세요.")
                 )
                 .frame(maxHeight: .infinity)
-            } else {
+            } else if !vm.ports.isEmpty {
+                Divider()
                 PortListView(vm: vm)
             }
+
             if let err = vm.lastError, !vm.hosts.isEmpty {
                 Text(err)
                     .font(.caption)
@@ -25,7 +28,7 @@ struct ContentView: View {
             }
         }
         .padding(.vertical)
-        .frame(minWidth: 360, idealWidth: 420, minHeight: 360, idealHeight: 480)
+        .frame(minWidth: 360, idealWidth: 420, minHeight: 80, idealHeight: vm.ports.isEmpty ? 120 : 480)
         .frame(maxHeight: .infinity, alignment: .top)
         .task { vm.loadHosts() }
         .sheet(item: Binding(
