@@ -11,7 +11,7 @@ struct HostPickerView: View {
                     Text(host.name).tag(SSHHost?.some(host))
                 }
             }
-            .frame(maxWidth: 300)
+            .frame(maxWidth: 200)
 
             Button("스캔") {
                 Task { await vm.scan() }

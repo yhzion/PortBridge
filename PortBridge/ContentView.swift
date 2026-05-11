@@ -24,7 +24,7 @@ struct ContentView: View {
             }
         }
         .padding(.vertical)
-        .frame(minWidth: 600, minHeight: 500)
+        .frame(minWidth: 360, idealWidth: 420, minHeight: 360, idealHeight: 480)
         .task { vm.loadHosts() }
         .sheet(item: Binding(
             get: { vm.pendingPortConflict },

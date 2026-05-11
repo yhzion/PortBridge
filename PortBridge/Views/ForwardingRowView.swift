@@ -26,10 +26,9 @@ struct ForwardingRowView: View {
             }
             Spacer()
             if case .error(let msg) = forwarding?.state {
-                Text(msg.prefix(80))
-                    .font(.caption2)
+                Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                    .lineLimit(2)
+                    .help(String(msg))
             }
             Toggle("", isOn: Binding(
                 get: { forwarding?.state == .active || forwarding?.state == .starting },
