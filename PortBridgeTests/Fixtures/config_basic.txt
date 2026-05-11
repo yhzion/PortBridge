@@ -1,0 +1,8 @@
+Host prod
+    HostName 10.0.0.1
+    User ubuntu
+    Port 2222
+
+Host staging
+    HostName 10.0.0.2
+    User deploy
