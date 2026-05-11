@@ -1,0 +1,4 @@
+COMMAND  PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+sshd     1   root   3u   IPv4  12345      0t0  TCP *:22 (LISTEN)
+postgres 100 postgres 5u IPv4  23456      0t0  TCP 127.0.0.1:5432 (LISTEN)
+nginx    200 www-data 6u IPv6  34567      0t0  TCP [::]:80 (LISTEN)
