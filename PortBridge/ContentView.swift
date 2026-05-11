@@ -51,9 +51,9 @@ struct PortConflictSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다")
+            Text(verbatim: "로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다")
                 .font(.headline)
-            Text("다른 로컬 포트를 입력하세요. 리모트는 \(conflict.host):\(conflict.remotePort).")
+            Text(verbatim: "다른 로컬 포트를 입력하세요. 리모트는 \(conflict.host):\(conflict.remotePort).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             TextField("로컬 포트", text: $localPortText)

@@ -18,7 +18,7 @@ struct ForwardingRowView: View {
         HStack {
             Text(statusIcon)
             VStack(alignment: .leading) {
-                Text("\(port.port)")
+                Text(verbatim: String(port.port))
                     .font(.system(.body, design: .monospaced))
                 Text("\(port.address) · \(port.processName ?? "-")")
                     .font(.caption)
