@@ -31,6 +31,15 @@ final class SSHConfigParserTests: XCTestCase {
         XCTAssertTrue(dbs.allSatisfy { $0.user == "postgres" })
     }
 
+    func test_include_recursivelyLoadsSubFile() throws {
+        let hosts = try SSHConfigParser.parse(path: fixtureURL("config_include"))
+        let names = hosts.map(\.name)
+        XCTAssertTrue(names.contains("main"))
+        XCTAssertTrue(names.contains("included"))
+        let included = hosts.first { $0.name == "included" }
+        XCTAssertEqual(included?.user, "extra")
+    }
+
     func test_basic_parsesTwoHostsWithOptions() throws {
         let hosts = try SSHConfigParser.parse(path: fixtureURL("config_basic"))
         XCTAssertEqual(hosts.count, 2)
