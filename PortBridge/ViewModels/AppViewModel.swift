@@ -84,14 +84,31 @@ final class AppViewModel {
     }
 
     private func startForwarding(host: String, remotePort: Int, localPort: Int) async {
+        let placeholderID = UUID()
+        let placeholder = Forwarding(
+            id: placeholderID,
+            host: host,
+            remotePort: remotePort,
+            localPort: localPort,
+            state: .starting
+        )
+        forwardings.append(placeholder)
+
         do {
             let fw = try await tunnels.start(host: host, remotePort: remotePort, localPort: localPort)
-            forwardings.append(fw)
+            if let idx = forwardings.firstIndex(where: { $0.id == placeholderID }) {
+                forwardings[idx] = fw
+            } else {
+                forwardings.append(fw)
+            }
         } catch PortBridgeError.forwardingDiedEarly(let stderr) where stderr.lowercased().contains("address already in use") {
+            forwardings.removeAll { $0.id == placeholderID }
             pendingPortConflict = PortConflict(host: host, remotePort: remotePort, attemptedLocal: localPort)
         } catch let error as PortBridgeError {
+            forwardings.removeAll { $0.id == placeholderID }
             lastError = error.errorDescription
         } catch {
+            forwardings.removeAll { $0.id == placeholderID }
             lastError = error.localizedDescription
         }
     }
