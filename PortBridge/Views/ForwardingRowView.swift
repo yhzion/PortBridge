@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ForwardingRowView: View {
     let port: RemotePort
@@ -70,6 +71,20 @@ struct ForwardingRowView: View {
             }
 
             Spacer(minLength: 4)
+
+            if forwarding?.state == .active, let local = forwarding?.localPort {
+                Button {
+                    if let url = URL(string: "http://localhost:\(local)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Image(systemName: "safari")
+                        .imageScale(.large)
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.borderless)
+                .help("기본 브라우저로 http://localhost:\(local) 열기")
+            }
 
             if case .error(let msg) = forwarding?.state {
                 Image(systemName: "info.circle")
