@@ -5,23 +5,26 @@ struct PortListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("포트 번호나 프로세스 이름으로 찾기", text: $vm.searchText)
-                    .textFieldStyle(.roundedBorder)
-            }
-            .padding(.horizontal)
-
             if vm.ports.isEmpty {
                 ContentUnavailableView(
-                    "검색된 포트가 없습니다",
-                    systemImage: "wifi.slash",
-                    description: Text("위에서 서버를 선택하고 '포트 검색'을 눌러보세요.")
+                    vm.selectedHost == nil ? "서버를 선택해주세요" : "열려있는 포트가 없습니다",
+                    systemImage: vm.selectedHost == nil ? "server.rack" : "magnifyingglass",
+                    description: Text(vm.selectedHost == nil
+                        ? "위에서 SSH 서버를 선택하고 '포트 검색'을 눌러보세요."
+                        : "이 서버에서 1000~65535 범위에 리스닝 중인 포트가 없습니다.")
                 )
+                .frame(maxHeight: .infinity)
             } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("포트 번호나 프로세스 이름으로 찾기", text: $vm.searchText)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(.horizontal)
+
                 HStack {
-                    Text(verbatim: "리모트에서 열려있는 포트 \(vm.filteredPorts.count)개")
+                    Text(verbatim: "검색된 포트 \(vm.filteredPorts.count)개 / 총 \(vm.ports.count)개")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()

@@ -9,14 +9,15 @@ struct ContentView: View {
             Divider()
             if vm.hosts.isEmpty {
                 ContentUnavailableView(
-                    "~/.ssh/config 호스트 없음",
+                    "등록된 SSH 호스트가 없습니다",
                     systemImage: "network.slash",
-                    description: Text(vm.lastError ?? "SSH config을 확인하세요.")
+                    description: Text(vm.lastError ?? "~/.ssh/config에 Host 항목을 추가하세요.")
                 )
+                .frame(maxHeight: .infinity)
             } else {
                 PortListView(vm: vm)
             }
-            if let err = vm.lastError {
+            if let err = vm.lastError, !vm.hosts.isEmpty {
                 Text(err)
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -25,6 +26,7 @@ struct ContentView: View {
         }
         .padding(.vertical)
         .frame(minWidth: 360, idealWidth: 420, minHeight: 360, idealHeight: 480)
+        .frame(maxHeight: .infinity, alignment: .top)
         .task { vm.loadHosts() }
         .sheet(item: Binding(
             get: { vm.pendingPortConflict },
