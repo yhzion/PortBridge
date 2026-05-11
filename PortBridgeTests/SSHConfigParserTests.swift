@@ -15,6 +15,22 @@ final class SSHConfigParserTests: XCTestCase {
         fatalError("Fixture \(name).txt not found in test bundle")
     }
 
+    func test_wildcardHosts_excluded() throws {
+        let hosts = try SSHConfigParser.parse(path: fixtureURL("config_wildcard"))
+        XCTAssertFalse(hosts.contains { $0.name == "*" })
+        XCTAssertFalse(hosts.contains { $0.name == "!blocked" })
+    }
+
+    func test_multipleHostsOnOneLine_eachRegistered() throws {
+        let hosts = try SSHConfigParser.parse(path: fixtureURL("config_wildcard"))
+        let names = hosts.map(\.name)
+        XCTAssertTrue(names.contains("db1"))
+        XCTAssertTrue(names.contains("db2"))
+        XCTAssertTrue(names.contains("db3"))
+        let dbs = hosts.filter { $0.name.hasPrefix("db") }
+        XCTAssertTrue(dbs.allSatisfy { $0.user == "postgres" })
+    }
+
     func test_basic_parsesTwoHostsWithOptions() throws {
         let hosts = try SSHConfigParser.parse(path: fixtureURL("config_basic"))
         XCTAssertEqual(hosts.count, 2)
