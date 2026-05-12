@@ -133,11 +133,13 @@ final class AppViewModel {
             let fw = try await tunnels.start(server: server, remotePort: remotePort, localPort: localPort)
             if let idx = forwardings.firstIndex(where: { $0.id == placeholderID }) {
                 forwardings[idx] = fw
+                if let ts = activatedAt.removeValue(forKey: placeholderID) {
+                    activatedAt[fw.id] = ts
+                }
             } else {
-                forwardings.append(fw)
-            }
-            if let ts = activatedAt.removeValue(forKey: placeholderID) {
-                activatedAt[fw.id] = ts
+                // placeholder was removed while start() was in-flight (user cancelled)
+                tunnels.stop(fw.id)
+                activatedAt[placeholderID] = nil
             }
         } catch PortBridgeError.forwardingDiedEarly(let stderr)
             where stderr.lowercased().contains("address already in use") {
