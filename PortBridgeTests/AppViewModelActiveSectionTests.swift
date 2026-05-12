@@ -107,4 +107,20 @@ final class AppViewModelActiveSectionTests: XCTestCase {
         XCTAssertNil(vm.activatedAt[id1])
         XCTAssertNotNil(vm.activatedAt[id2])
     }
+
+    func test_toggleForwardingOff_removesActivatedAtEntry() async {
+        let vm = makeVM()
+        let port = remotePort(8080)
+        let fwID = UUID()
+        vm.ports = [port]
+        vm.forwardings = [
+            Forwarding(id: fwID, host: "prod", remotePort: 8080, localPort: 8080, state: .active)
+        ]
+        vm.setActivatedAtForTesting(fwID, Date())
+
+        await vm.toggleForwarding(for: port)
+
+        XCTAssertNil(vm.activatedAt[fwID])
+        XCTAssertTrue(vm.forwardings.isEmpty)
+    }
 }

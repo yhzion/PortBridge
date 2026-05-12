@@ -98,6 +98,7 @@ final class AppViewModel {
         guard let host = selectedHost else { return }
         if let existing = forwardings.first(where: { $0.host == host.name && $0.remotePort == port.port }) {
             tunnels.stop(existing.id)
+            activatedAt[existing.id] = nil
             forwardings.removeAll { $0.id == existing.id }
             return
         }
@@ -136,6 +137,7 @@ final class AppViewModel {
             state: .starting
         )
         forwardings.append(placeholder)
+        activatedAt[placeholderID] = Date()
 
         do {
             let fw = try await tunnels.start(host: host, remotePort: remotePort, localPort: localPort)
@@ -144,14 +146,21 @@ final class AppViewModel {
             } else {
                 forwardings.append(fw)
             }
+            // id 전이: placeholder의 활성화 시각을 새 fw.id로 이전
+            if let ts = activatedAt.removeValue(forKey: placeholderID) {
+                activatedAt[fw.id] = ts
+            }
         } catch PortBridgeError.forwardingDiedEarly(let stderr) where stderr.lowercased().contains("address already in use") {
             forwardings.removeAll { $0.id == placeholderID }
+            activatedAt[placeholderID] = nil
             pendingPortConflict = PortConflict(host: host, remotePort: remotePort, attemptedLocal: localPort)
         } catch let error as PortBridgeError {
             forwardings.removeAll { $0.id == placeholderID }
+            activatedAt[placeholderID] = nil
             lastError = error.errorDescription
         } catch {
             forwardings.removeAll { $0.id == placeholderID }
+            activatedAt[placeholderID] = nil
             lastError = error.localizedDescription
         }
     }
