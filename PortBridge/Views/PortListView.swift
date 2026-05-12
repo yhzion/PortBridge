@@ -23,24 +23,42 @@ struct PortListView: View {
                 }
                 .padding(.horizontal)
 
-                HStack {
-                    Text(verbatim: "검색된 포트 \(vm.filteredPorts.count)개 / 총 \(vm.ports.count)개")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal)
+                List {
+                    if !vm.activeForwardedPorts.isEmpty {
+                        Section {
+                            ForEach(vm.activeForwardedPorts, id: \.port.id) { entry in
+                                ForwardingRowView(
+                                    port: entry.port,
+                                    forwarding: entry.forwarding,
+                                    isActive: true,
+                                    onToggle: { Task { await vm.toggleForwarding(for: entry.port) } }
+                                )
+                            }
+                        } header: {
+                            ActiveSectionHeader(
+                                count: vm.activeForwardedPorts.count,
+                                onStopAll: { vm.stopAllForCurrentHost() }
+                            )
+                        }
+                    }
 
-                List(vm.filteredPorts) { port in
-                    ForwardingRowView(
-                        port: port,
-                        forwarding: vm.forwardings.first {
-                            $0.remotePort == port.port && $0.host == vm.selectedHost?.name
-                        },
-                        isActive: false,
-                        onToggle: { Task { await vm.toggleForwarding(for: port) } }
-                    )
+                    Section {
+                        ForEach(vm.inactivePorts) { port in
+                            ForwardingRowView(
+                                port: port,
+                                forwarding: nil,
+                                isActive: false,
+                                onToggle: { Task { await vm.toggleForwarding(for: port) } }
+                            )
+                        }
+                    } header: {
+                        AllPortsSectionHeader(count: vm.inactivePorts.count)
+                    }
                 }
+                .animation(
+                    .spring(response: 0.4, dampingFraction: 0.85),
+                    value: vm.activeForwardedPorts.map(\.port.id)
+                )
             }
         }
     }
