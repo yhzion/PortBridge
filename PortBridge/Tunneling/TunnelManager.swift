@@ -1,8 +1,40 @@
 // PortBridge/Tunneling/TunnelManager.swift
 import Foundation
+import Darwin
 
 @MainActor
 final class TunnelManager {
+    /// Kills any ssh port-forward processes left over from a previous PortBridge
+    /// run (force-quit, crash, Xcode stop, etc). Matches by the exact argv
+    /// signature that `start(server:remotePort:localPort:)` emits below.
+    ///
+    /// Safe to call on every app launch — pgrep returns nothing when clean.
+    nonisolated static func cleanupOrphanedTunnels() {
+        let pgrep = Process()
+        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        pgrep.arguments = [
+            "-f",
+            "/usr/bin/ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o BatchMode=yes"
+        ]
+        let pipe = Pipe()
+        pgrep.standardOutput = pipe
+        pgrep.standardError = Pipe()
+        do {
+            try pgrep.run()
+            pgrep.waitUntilExit()
+        } catch {
+            return
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else { return }
+        let pids: [pid_t] = output
+            .split(separator: "\n")
+            .compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+        for pid in pids {
+            _ = Darwin.kill(pid, SIGTERM)
+        }
+    }
+
     private(set) var active: [UUID: ActiveTunnel] = [:]
     weak var delegate: TunnelManagerDelegate?
 
