@@ -5,7 +5,7 @@ struct HostPickerView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "server.rack")
+            Text("서버")
                 .foregroundStyle(.secondary)
 
             Picker("리모트 서버", selection: $vm.selectedHost) {

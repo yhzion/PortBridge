@@ -30,7 +30,6 @@ struct PortListView: View {
                                 ForwardingRowView(
                                     port: entry.port,
                                     forwarding: entry.forwarding,
-                                    isActive: true,
                                     onToggle: { Task { await vm.toggleForwarding(for: entry.port) } }
                                 )
                             }
@@ -47,7 +46,6 @@ struct PortListView: View {
                             ForwardingRowView(
                                 port: port,
                                 forwarding: nil,
-                                isActive: false,
                                 onToggle: { Task { await vm.toggleForwarding(for: port) } }
                             )
                         }
