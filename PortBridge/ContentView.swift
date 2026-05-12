@@ -28,7 +28,7 @@ struct ContentView: View {
             }
         }
         .padding(.vertical)
-        .frame(minWidth: 360, idealWidth: 420, minHeight: 80, idealHeight: vm.ports.isEmpty ? 120 : 480)
+        .frame(minWidth: 480, idealWidth: 540, minHeight: 80, idealHeight: vm.ports.isEmpty ? 120 : 480)
         .frame(maxHeight: .infinity, alignment: .top)
         .task { vm.loadHosts() }
         .sheet(item: Binding(

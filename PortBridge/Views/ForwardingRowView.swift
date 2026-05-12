@@ -47,6 +47,8 @@ struct ForwardingRowView: View {
         }
     }
 
+    @State private var isRowHovering = false
+
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             statusIndicator
@@ -72,18 +74,8 @@ struct ForwardingRowView: View {
 
             Spacer(minLength: 4)
 
-            if forwarding?.state == .active, let local = forwarding?.localPort {
-                Button {
-                    if let url = URL(string: "http://localhost:\(local)") {
-                        NSWorkspace.shared.open(url)
-                    }
-                } label: {
-                    Image(systemName: "safari")
-                        .imageScale(.large)
-                        .foregroundStyle(.tint)
-                }
-                .buttonStyle(.borderless)
-                .help("기본 브라우저로 http://localhost:\(local) 열기")
+            if forwarding?.state == .active, let local = forwarding?.localPort, isRowHovering {
+                OpenInBrowserButton(localPort: local)
             }
 
             if case .error(let msg) = forwarding?.state {
@@ -94,6 +86,7 @@ struct ForwardingRowView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .onHover { isRowHovering = $0 }
         .onTapGesture {
             guard !isStarting else { return }
             onToggle()
@@ -110,5 +103,57 @@ struct ForwardingRowView: View {
             Image(systemName: statusSymbol.name)
                 .foregroundStyle(statusSymbol.color)
         }
+    }
+}
+
+private struct OpenInBrowserButton: View {
+    let localPort: Int
+    @State private var isHovering = false
+    @State private var isPressed = false
+
+    private var url: URL? { URL(string: "http://localhost:\(localPort)") }
+
+    var body: some View {
+        Button {
+            if let url { NSWorkspace.shared.open(url) }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.right.square")
+                    .imageScale(.small)
+                Text("브라우저에서 열기")
+                    .font(.caption)
+            }
+            .foregroundStyle(.tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.accentColor.opacity(backgroundOpacity))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(isHovering ? 0.35 : 0.18), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in isPressed = true }
+                .onEnded { _ in isPressed = false }
+        )
+        .animation(.easeOut(duration: 0.08), value: isHovering)
+        .animation(.easeOut(duration: 0.08), value: isPressed)
+        .help("기본 브라우저로 http://localhost:\(localPort) 열기")
+    }
+
+    private var backgroundOpacity: Double {
+        if isPressed { return 0.25 }
+        if isHovering { return 0.15 }
+        return 0.06
     }
 }
