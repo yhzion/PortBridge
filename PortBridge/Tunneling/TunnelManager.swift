@@ -1,12 +1,12 @@
+// PortBridge/Tunneling/TunnelManager.swift
 import Foundation
 
 @MainActor
 final class TunnelManager {
     private(set) var active: [UUID: ActiveTunnel] = [:]
-
     weak var delegate: TunnelManagerDelegate?
 
-    func start(host: String, remotePort: Int, localPort: Int) async throws -> Forwarding {
+    func start(server: Server, remotePort: Int, localPort: Int) async throws -> Forwarding {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
         process.arguments = [
@@ -15,8 +15,9 @@ final class TunnelManager {
             "-o", "ServerAliveInterval=15",
             "-o", "ServerAliveCountMax=3",
             "-o", "BatchMode=yes",
+            "-p", "\(server.port)",
             "-L", "\(localPort):localhost:\(remotePort)",
-            host
+            server.sshTarget
         ]
 
         let stderrPipe = Pipe()
@@ -32,18 +33,22 @@ final class TunnelManager {
 
         try process.run()
 
-        // 시작 검증: 2초 살아남으면 정상
         try await Task.sleep(nanoseconds: 2_000_000_000)
         if !process.isRunning {
             let stderr = stderrBuffer.snapshot()
             throw PortBridgeError.forwardingDiedEarly(stderr: stderr)
         }
 
-        let forwarding = Forwarding(host: host, remotePort: remotePort, localPort: localPort, state: .active)
+        let forwarding = Forwarding(
+            serverId: server.id,
+            serverDisplayName: server.displayName,
+            remotePort: remotePort,
+            localPort: localPort,
+            state: .active
+        )
         let tunnel = ActiveTunnel(process: process, forwarding: forwarding, stderr: stderrBuffer)
         active[forwarding.id] = tunnel
 
-        // 모니터 Task
         let id = forwarding.id
         tunnel.monitorTask = Task { [weak self] in
             await Self.waitForExit(process)
@@ -80,9 +85,7 @@ final class TunnelManager {
 
     private static func waitForExit(_ process: Process) async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            process.terminationHandler = { _ in
-                cont.resume()
-            }
+            process.terminationHandler = { _ in cont.resume() }
             if !process.isRunning {
                 process.terminationHandler = nil
                 cont.resume()
