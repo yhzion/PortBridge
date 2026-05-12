@@ -12,6 +12,13 @@ final class AppViewModel {
     var isScanning: Bool = false
     var lastError: String?
     var pendingPortConflict: PortConflict?
+    private(set) var activatedAt: [UUID: Date] = [:]
+
+    #if DEBUG
+    func setActivatedAtForTesting(_ id: UUID, _ date: Date) {
+        activatedAt[id] = date
+    }
+    #endif
 
     private let parser: () throws -> [SSHHost]
     private let scanner: PortScanner
@@ -35,6 +42,29 @@ final class AppViewModel {
             String($0.port).contains(q) ||
             ($0.processName?.lowercased().contains(q) ?? false)
         }
+    }
+
+    var activeForwardedPorts: [(port: RemotePort, forwarding: Forwarding)] {
+        let active = forwardings.filter { fw in
+            guard fw.host == selectedHost?.name else { return false }
+            switch fw.state {
+            case .active, .starting, .error: return true
+            case .idle: return false
+            }
+        }
+        return active
+            .compactMap { fw in
+                ports.first(where: { $0.port == fw.remotePort }).map { (port: $0, forwarding: fw) }
+            }
+            .sorted {
+                activatedAt[$0.forwarding.id, default: .distantPast]
+                > activatedAt[$1.forwarding.id, default: .distantPast]
+            }
+    }
+
+    var inactivePorts: [RemotePort] {
+        let activePortNums = Set(activeForwardedPorts.map { $0.port.port })
+        return filteredPorts.filter { !activePortNums.contains($0.port) }
     }
 
     func loadHosts() {
