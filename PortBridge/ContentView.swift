@@ -1,48 +1,22 @@
+// PortBridge/ContentView.swift
 import SwiftUI
 
 struct ContentView: View {
     @Environment(AppViewModel.self) private var vm
 
     var body: some View {
-        VStack(spacing: 12) {
-            HostPickerView(vm: vm)
+        @Bindable var vm = vm
+        VStack(spacing: 0) {
+            Divider()
+            ServerListView(vm: vm)
 
-            if vm.hosts.isEmpty {
-                Divider()
-                ContentUnavailableView(
-                    "등록된 SSH 호스트가 없습니다",
-                    systemImage: "network.slash",
-                    description: Text(vm.lastError ?? "~/.ssh/config에 Host 항목을 추가하세요.")
-                )
-                .frame(maxHeight: .infinity)
-            } else if !vm.ports.isEmpty {
-                Divider()
-                PortListView(vm: vm)
-            }
-
-            if let err = vm.lastError, !vm.hosts.isEmpty {
-                HStack(alignment: .top, spacing: 6) {
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
-                        vm.lastError = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                            .imageScale(.small)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("에러 메시지 닫기")
-                }
-                .padding(.horizontal)
+            if let err = vm.lastError {
+                errorBanner(err)
             }
         }
-        .padding(.vertical)
-        .frame(minWidth: 360, idealWidth: 420, minHeight: 80, idealHeight: vm.ports.isEmpty ? 120 : 480)
+        .frame(minWidth: 480, idealWidth: 540, minHeight: 80, idealHeight: vm.serverSections.isEmpty ? 200 : 480)
         .frame(maxHeight: .infinity, alignment: .top)
-        .task { vm.loadHosts() }
+        .task { await vm.scanAll() }
         .sheet(item: Binding(
             get: { vm.pendingPortConflict },
             set: { vm.pendingPortConflict = $0 }
@@ -51,6 +25,22 @@ struct ContentView: View {
                 Task { await vm.resolveConflict(with: newPort) }
             }
         }
+    }
+
+    private func errorBanner(_ msg: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(msg)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button { vm.lastError = nil } label: {
+                Image(systemName: "xmark").imageScale(.small).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help("에러 메시지 닫기")
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 4)
     }
 }
 
@@ -70,7 +60,7 @@ struct PortConflictSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(verbatim: "로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다")
                 .font(.headline)
-            Text(verbatim: "다른 로컬 포트를 입력하세요. 리모트는 \(conflict.host):\(conflict.remotePort).")
+            Text(verbatim: "다른 로컬 포트를 입력하세요. 리모트는 \(conflict.serverDisplayName):\(conflict.remotePort).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             TextField("로컬 포트", text: $localPortText)

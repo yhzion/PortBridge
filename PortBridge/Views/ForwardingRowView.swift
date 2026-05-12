@@ -47,6 +47,8 @@ struct ForwardingRowView: View {
         }
     }
 
+    @State private var isRowHovering = false
+
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             statusIndicator
@@ -63,6 +65,14 @@ struct ForwardingRowView: View {
                             .padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.15), in: Capsule())
                     }
+                    if let name = forwarding?.serverDisplayName {
+                        Text(verbatim: name)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .foregroundStyle(.tint)
+                            .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    }
                 }
                 Text(stateLabel ?? addressLabel)
                     .font(.caption)
@@ -72,7 +82,7 @@ struct ForwardingRowView: View {
 
             Spacer(minLength: 4)
 
-            if forwarding?.state == .active, let local = forwarding?.localPort {
+            if forwarding?.state == .active, let local = forwarding?.localPort, isRowHovering {
                 OpenInBrowserButton(localPort: local)
             }
 
@@ -84,6 +94,7 @@ struct ForwardingRowView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .onHover { isRowHovering = $0 }
         .onTapGesture {
             guard !isStarting else { return }
             onToggle()
@@ -116,8 +127,8 @@ private struct OpenInBrowserButton: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.up.right.square")
-                    .imageScale(.medium)
-                Text("열기")
+                    .imageScale(.small)
+                Text("브라우저에서 열기")
                     .font(.caption)
             }
             .foregroundStyle(.tint)
@@ -136,21 +147,16 @@ private struct OpenInBrowserButton: View {
         .buttonStyle(.plain)
         .onHover { hovering in
             isHovering = hovering
-            if hovering {
-                NSCursor.pointingHand.set()
-            } else {
-                NSCursor.arrow.set()
-            }
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in isPressed = true }
                 .onEnded { _ in isPressed = false }
         )
-        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .animation(.easeOut(duration: 0.08), value: isHovering)
         .animation(.easeOut(duration: 0.08), value: isPressed)
         .help("기본 브라우저로 http://localhost:\(localPort) 열기")
-        .accessibilityLabel("브라우저에서 localhost 포트 \(localPort) 열기")
     }
 
     private var backgroundOpacity: Double {

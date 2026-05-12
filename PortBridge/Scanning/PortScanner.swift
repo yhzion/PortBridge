@@ -1,15 +1,17 @@
+// PortBridge/Scanning/PortScanner.swift
 import Foundation
 
 struct PortScanner {
     let runner: CommandRunner
     let sshExecutable: String = "/usr/bin/ssh"
 
-    func scan(host: String, range: ClosedRange<Int> = 1000...65535) async throws -> [RemotePort] {
+    func scan(server: Server, range: ClosedRange<Int> = 1000...65535) async throws -> [RemotePort] {
         let remoteCommand = "ss -tlnH 2>/dev/null || lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null"
         let args = [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=10",
-            host,
+            "-p", "\(server.port)",
+            server.sshTarget,
             remoteCommand
         ]
 
@@ -18,10 +20,10 @@ struct PortScanner {
         if result.exitCode != 0 {
             let stderr = result.stderr.lowercased()
             if stderr.contains("permission denied") || stderr.contains("publickey") {
-                throw PortBridgeError.sshAuthFailed(host: host)
+                throw PortBridgeError.sshAuthFailed(host: server.host)
             }
             if stderr.contains("connection timed out") || stderr.contains("connect timeout") {
-                throw PortBridgeError.sshConnectTimeout(host: host)
+                throw PortBridgeError.sshConnectTimeout(host: server.host)
             }
             if result.stdout.isEmpty {
                 throw PortBridgeError.remoteCommandNotFound
