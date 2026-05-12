@@ -110,6 +110,16 @@ final class AppViewModel {
         await startForwarding(host: pending.host, remotePort: pending.remotePort, localPort: newLocalPort)
     }
 
+    func stopAllForCurrentHost() {
+        guard let host = selectedHost else { return }
+        let mine = forwardings.filter { $0.host == host.name }
+        for fw in mine {
+            tunnels.stop(fw.id)
+            activatedAt[fw.id] = nil
+        }
+        forwardings.removeAll { $0.host == host.name }
+    }
+
     func shutdownAll() {
         tunnels.shutdownAll()
         forwardings.removeAll()

@@ -79,4 +79,32 @@ final class AppViewModelActiveSectionTests: XCTestCase {
         ]
         XCTAssertTrue(vm.activeForwardedPorts.isEmpty)
     }
+
+    func test_stopAllForCurrentHost_clearsOnlyCurrentHostForwardings() {
+        let vm = makeVM()  // selectedHost = "prod"
+        vm.forwardings = [
+            Forwarding(host: "prod", remotePort: 8080, localPort: 8080, state: .active),
+            Forwarding(host: "prod", remotePort: 5432, localPort: 5432, state: .active),
+            Forwarding(host: "other", remotePort: 22, localPort: 22, state: .active)
+        ]
+        vm.stopAllForCurrentHost()
+        XCTAssertEqual(vm.forwardings.count, 1)
+        XCTAssertEqual(vm.forwardings.first?.host, "other")
+    }
+
+    func test_stopAllForCurrentHost_clearsActivatedAtForRemovedIDs() {
+        let vm = makeVM()
+        let id1 = UUID()
+        let id2 = UUID()
+        vm.forwardings = [
+            Forwarding(id: id1, host: "prod", remotePort: 8080, localPort: 8080, state: .active),
+            Forwarding(id: id2, host: "other", remotePort: 22, localPort: 22, state: .active)
+        ]
+        vm.setActivatedAtForTesting(id1, Date())
+        vm.setActivatedAtForTesting(id2, Date())
+
+        vm.stopAllForCurrentHost()
+        XCTAssertNil(vm.activatedAt[id1])
+        XCTAssertNotNil(vm.activatedAt[id2])
+    }
 }
