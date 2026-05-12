@@ -4,6 +4,7 @@ import AppKit
 struct ForwardingRowView: View {
     let port: RemotePort
     let forwarding: Forwarding?
+    let isActive: Bool
     let onToggle: () -> Void
 
     private var isStarting: Bool {
@@ -93,6 +94,14 @@ struct ForwardingRowView: View {
             }
         }
         .padding(.vertical, 4)
+        .background(isActive ? Color.accentColor.opacity(0.08) : Color.clear)
+        .overlay(alignment: .leading) {
+            if isActive {
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: 3)
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             guard !isStarting else { return }

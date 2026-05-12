@@ -37,6 +37,7 @@ struct PortListView: View {
                         forwarding: vm.forwardings.first {
                             $0.remotePort == port.port && $0.host == vm.selectedHost?.name
                         },
+                        isActive: false,
                         onToggle: { Task { await vm.toggleForwarding(for: port) } }
                     )
                 }
