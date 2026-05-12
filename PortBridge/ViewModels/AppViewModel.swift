@@ -1,114 +1,161 @@
+// PortBridge/ViewModels/AppViewModel.swift
 import Foundation
 import Observation
 
 @MainActor
 @Observable
 final class AppViewModel {
-    var hosts: [SSHHost] = []
-    var selectedHost: SSHHost?
-    var ports: [RemotePort] = []
-    var searchText: String = ""
-    var forwardings: [Forwarding] = []
-    var isScanning: Bool = false
-    var lastError: String?
-    var pendingPortConflict: PortConflict?
-
-    private let parser: () throws -> [SSHHost]
+    private let store: ServerStore
     private let scanner: PortScanner
     private let tunnels: TunnelManager
 
+    private(set) var serverSections: [ServerSectionViewModel] = []
+    var forwardings: [Forwarding] = []
+    private(set) var activatedAt: [UUID: Date] = [:]
+    var pendingPortConflict: PortConflict?
+    var lastError: String?
+
     init(
-        parser: @escaping () throws -> [SSHHost] = { try SSHConfigParser.parse() },
+        store: ServerStore = ServerStore(),
         scanner: PortScanner = PortScanner(runner: ProcessCommandRunner()),
         tunnels: TunnelManager? = nil
     ) {
-        self.parser = parser
+        self.store = store
         self.scanner = scanner
-        self.tunnels = tunnels ?? TunnelManager()
-        self.tunnels.delegate = self
+        let t = tunnels ?? TunnelManager()
+        self.tunnels = t
+        t.delegate = self
+        rebuildSections()
     }
 
-    var filteredPorts: [RemotePort] {
-        guard !searchText.isEmpty else { return ports }
-        let q = searchText.lowercased()
-        return ports.filter {
-            String($0.port).contains(q) ||
-            ($0.processName?.lowercased().contains(q) ?? false)
+    var activeForwardings: [Forwarding] {
+        forwardings
+            .filter { fw in
+                switch fw.state {
+                case .active, .starting, .error: return true
+                case .idle: return false
+                }
+            }
+            .sorted {
+                activatedAt[$0.id, default: .distantPast] > activatedAt[$1.id, default: .distantPast]
+            }
+    }
+
+    // MARK: - Server CRUD
+
+    func addServer(_ server: Server) {
+        store.add(server)
+        let section = ServerSectionViewModel(server: server, scanner: scanner)
+        serverSections.append(section)
+        Task { await section.scan() }
+    }
+
+    func updateServer(_ server: Server) {
+        store.update(server)
+        rebuildSections()
+    }
+
+    func deleteServer(_ server: Server) {
+        stopAll(for: server.id)
+        store.delete(server)
+        serverSections.removeAll { $0.server.id == server.id }
+    }
+
+    // MARK: - Scanning
+
+    func scanAll() async {
+        await withTaskGroup(of: Void.self) { group in
+            for section in serverSections {
+                group.addTask { await section.scan() }
+            }
         }
     }
 
-    func loadHosts() {
-        do {
-            hosts = try parser()
-        } catch let error as PortBridgeError {
-            lastError = error.errorDescription
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
+    // MARK: - Forwarding
 
-    func scan() async {
-        guard let host = selectedHost else { return }
-        isScanning = true
-        defer { isScanning = false }
-        do {
-            ports = try await scanner.scan(host: host.name)
-        } catch let error as PortBridgeError {
-            lastError = error.errorDescription
-            ports = []
-        } catch {
-            lastError = error.localizedDescription
-            ports = []
-        }
-    }
-
-    func toggleForwarding(for port: RemotePort) async {
-        guard let host = selectedHost else { return }
-        if let existing = forwardings.first(where: { $0.host == host.name && $0.remotePort == port.port }) {
+    func toggleForwarding(serverId: UUID, for port: RemotePort) async {
+        if let existing = forwardings.first(where: { $0.serverId == serverId && $0.remotePort == port.port }) {
             tunnels.stop(existing.id)
+            activatedAt[existing.id] = nil
             forwardings.removeAll { $0.id == existing.id }
             return
         }
-        await startForwarding(host: host.name, remotePort: port.port, localPort: port.port)
+        guard let section = serverSections.first(where: { $0.server.id == serverId }) else { return }
+        await startForwarding(server: section.server, remotePort: port.port, localPort: port.port)
     }
 
     func resolveConflict(with newLocalPort: Int) async {
         guard let pending = pendingPortConflict else { return }
         pendingPortConflict = nil
-        await startForwarding(host: pending.host, remotePort: pending.remotePort, localPort: newLocalPort)
+        guard let section = serverSections.first(where: { $0.server.id == pending.serverId }) else { return }
+        await startForwarding(server: section.server, remotePort: pending.remotePort, localPort: newLocalPort)
+    }
+
+    func stopAll(for serverId: UUID) {
+        let mine = forwardings.filter { $0.serverId == serverId }
+        for fw in mine {
+            tunnels.stop(fw.id)
+            activatedAt[fw.id] = nil
+        }
+        forwardings.removeAll { $0.serverId == serverId }
     }
 
     func shutdownAll() {
         tunnels.shutdownAll()
         forwardings.removeAll()
+        activatedAt.removeAll()
     }
 
-    private func startForwarding(host: String, remotePort: Int, localPort: Int) async {
+    // MARK: - Private
+
+    private func rebuildSections() {
+        let existing = Dictionary(uniqueKeysWithValues: serverSections.map { ($0.server.id, $0) })
+        serverSections = store.servers.map { server in
+            existing[server.id] ?? ServerSectionViewModel(server: server, scanner: scanner)
+        }
+    }
+
+    private func startForwarding(server: Server, remotePort: Int, localPort: Int) async {
+        lastError = nil
         let placeholderID = UUID()
         let placeholder = Forwarding(
             id: placeholderID,
-            host: host,
+            serverId: server.id,
+            serverDisplayName: server.displayName,
             remotePort: remotePort,
             localPort: localPort,
             state: .starting
         )
         forwardings.append(placeholder)
+        activatedAt[placeholderID] = Date()
 
         do {
-            let fw = try await tunnels.start(host: host, remotePort: remotePort, localPort: localPort)
+            let fw = try await tunnels.start(server: server, remotePort: remotePort, localPort: localPort)
             if let idx = forwardings.firstIndex(where: { $0.id == placeholderID }) {
                 forwardings[idx] = fw
             } else {
                 forwardings.append(fw)
             }
-        } catch PortBridgeError.forwardingDiedEarly(let stderr) where stderr.lowercased().contains("address already in use") {
+            if let ts = activatedAt.removeValue(forKey: placeholderID) {
+                activatedAt[fw.id] = ts
+            }
+        } catch PortBridgeError.forwardingDiedEarly(let stderr)
+            where stderr.lowercased().contains("address already in use") {
             forwardings.removeAll { $0.id == placeholderID }
-            pendingPortConflict = PortConflict(host: host, remotePort: remotePort, attemptedLocal: localPort)
+            activatedAt[placeholderID] = nil
+            pendingPortConflict = PortConflict(
+                serverId: server.id,
+                serverDisplayName: server.displayName,
+                remotePort: remotePort,
+                attemptedLocal: localPort
+            )
         } catch let error as PortBridgeError {
             forwardings.removeAll { $0.id == placeholderID }
+            activatedAt[placeholderID] = nil
             lastError = error.errorDescription
         } catch {
             forwardings.removeAll { $0.id == placeholderID }
+            activatedAt[placeholderID] = nil
             lastError = error.localizedDescription
         }
     }
@@ -116,7 +163,8 @@ final class AppViewModel {
 
 struct PortConflict: Identifiable, Equatable {
     let id = UUID()
-    let host: String
+    let serverId: UUID
+    let serverDisplayName: String
     let remotePort: Int
     let attemptedLocal: Int
 }
