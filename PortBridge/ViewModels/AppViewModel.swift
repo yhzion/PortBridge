@@ -14,6 +14,15 @@ final class AppViewModel {
     private(set) var activatedAt: [UUID: Date] = [:]
     var pendingPortConflict: PortConflict?
     var lastError: String?
+    var searchText: String = ""
+
+    func matches(_ port: RemotePort) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return true }
+        if String(port.port).contains(query) { return true }
+        if let proc = port.processName?.lowercased(), proc.contains(query) { return true }
+        return false
+    }
 
     init(
         store: ServerStore = ServerStore(),

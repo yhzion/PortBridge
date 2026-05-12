@@ -46,18 +46,30 @@ struct ServerListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var visibleActiveForwardings: [Forwarding] {
+        vm.activeForwardings.filter { fw in
+            guard let section = vm.serverSections.first(where: { $0.server.id == fw.serverId }),
+                  let port = section.ports.first(where: { $0.port == fw.remotePort }) else {
+                return vm.searchText.isEmpty
+            }
+            return vm.matches(port)
+        }
+    }
+
     private var serverList: some View {
         List {
             // 포워딩 중 섹션
-            if !vm.activeForwardings.isEmpty {
+            if !visibleActiveForwardings.isEmpty {
                 Section {
-                    ForEach(vm.activeForwardings, id: \.id) { fw in
+                    ForEach(visibleActiveForwardings, id: \.id) { fw in
                         activeRow(for: fw)
                     }
                 } header: {
                     Text("포워딩 중")
-                        .font(.caption)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                         .foregroundStyle(.tint)
+                        .padding(.vertical, 2)
                 }
             }
 
@@ -66,6 +78,7 @@ struct ServerListView: View {
                 ServerSectionView(
                     section: section,
                     activeForwardings: vm.activeForwardings,
+                    matches: { vm.matches($0) },
                     onToggle: { port in
                         Task { await vm.toggleForwarding(serverId: section.server.id, for: port) }
                     },
@@ -74,6 +87,8 @@ struct ServerListView: View {
                 )
             }
         }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 28)
     }
 
     @ViewBuilder
@@ -89,16 +104,38 @@ struct ServerListView: View {
     }
 
     private var serverListHeader: some View {
-        HStack {
-            Text("서버")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
+        HStack(spacing: 8) {
+            if vm.serverSections.isEmpty {
+                Text("서버를 추가하세요")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("포트 번호나 프로세스 이름으로 찾기", text: $vm.searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                if !vm.searchText.isEmpty {
+                    Button {
+                        vm.searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("검색어 지우기")
+                }
+            }
+
+            Spacer(minLength: 4)
+
             Button {
                 Task { await vm.scanAll() }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
@@ -108,14 +145,14 @@ struct ServerListView: View {
                 showAddSheet = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
             .help("서버 추가")
         }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(.bar)
     }
 }

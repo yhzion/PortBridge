@@ -5,9 +5,14 @@ import AppKit
 struct ServerSectionView: View {
     let section: ServerSectionViewModel
     let activeForwardings: [Forwarding]
+    let matches: (RemotePort) -> Bool
     let onToggle: (RemotePort) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
+
+    private var activeCount: Int {
+        activeForwardings.filter { $0.serverId == section.server.id }.count
+    }
 
     private var inactivePorts: [RemotePort] {
         let activeNums = Set(
@@ -15,7 +20,7 @@ struct ServerSectionView: View {
                 .filter { $0.serverId == section.server.id }
                 .map { $0.remotePort }
         )
-        return section.ports.filter { !activeNums.contains($0.port) }
+        return section.ports.filter { !activeNums.contains($0.port) && matches($0) }
     }
 
     var body: some View {
@@ -38,7 +43,7 @@ struct ServerSectionView: View {
                 .padding(.vertical, 4)
 
         case .scanning:
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("스캔 중…").font(.caption).foregroundStyle(.secondary)
             }
@@ -66,35 +71,64 @@ struct ServerSectionView: View {
         }
     }
 
+    private var primaryLabel: String {
+        section.server.name ?? section.server.host
+    }
+
+    private var secondaryLabel: String {
+        let target = section.server.sshTarget
+        return section.server.port == 22 ? target : "\(target):\(section.server.port)"
+    }
+
     private var sectionHeader: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 8) {
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     section.toggleExpanded()
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(section.server.displayName)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                }
+                Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12)
             }
             .buttonStyle(.plain)
 
-            Spacer()
+            ServerMonogram(server: section.server)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(primaryLabel)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(secondaryLabel)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if activeCount > 0 {
+                Text("\(activeCount)")
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Color.accentColor.opacity(0.14), in: Capsule())
+                    .help("이 서버에서 포워딩 중인 포트 수")
+            }
 
             if case .scanning = section.scanState {
-                ProgressView().controlSize(.mini)
+                ProgressView().controlSize(.small)
             } else {
                 Button { Task { await section.scan() } } label: {
-                    Image(systemName: "arrow.clockwise").font(.caption).foregroundStyle(.secondary)
+                    Image(systemName: "arrow.clockwise").font(.body).foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("\(section.server.displayName) 포트 재스캔")
+                .help("\(primaryLabel) 포트 재스캔")
             }
 
             Menu {
@@ -102,11 +136,44 @@ struct ServerSectionView: View {
                 Divider()
                 Button("삭제", role: .destructive, action: onDelete)
             } label: {
-                Image(systemName: "ellipsis").font(.caption).foregroundStyle(.secondary)
+                Image(systemName: "ellipsis").font(.body).foregroundStyle(.secondary)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .frame(width: 20)
         }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct ServerMonogram: View {
+    let server: Server
+
+    private var initial: String {
+        let source = server.name ?? server.host
+        guard let first = source.first else { return "?" }
+        return String(first).uppercased()
+    }
+
+    /// Deterministic hue from host bytes — Swift's String.hashValue is randomized
+    /// per process, so we use a stable UTF-8 byte sum instead.
+    private var hue: Double {
+        let sum = server.host.utf8.reduce(0) { $0 + Int($1) }
+        return Double(sum % 360) / 360.0
+    }
+
+    var body: some View {
+        let tint = Color(hue: hue, saturation: 0.55, brightness: 0.85)
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(tint.opacity(0.18))
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(tint.opacity(0.40), lineWidth: 0.5)
+            Text(initial)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 24, height: 24)
     }
 }
 
@@ -116,7 +183,7 @@ private struct AuthFailedView: View {
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Label("SSH 키 인증 실패", systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.orange)
