@@ -124,6 +124,7 @@ final class AppViewModel {
     func shutdownAll() {
         tunnels.shutdownAll()
         forwardings.removeAll()
+        activatedAt.removeAll()
     }
 
     private func startForwarding(host: String, remotePort: Int, localPort: Int) async {
