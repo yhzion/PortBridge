@@ -21,10 +21,22 @@ struct ContentView: View {
             }
 
             if let err = vm.lastError, !vm.hosts.isEmpty {
-                Text(err)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal)
+                HStack(alignment: .top, spacing: 6) {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        vm.lastError = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("에러 메시지 닫기")
+                }
+                .padding(.horizontal)
             }
         }
         .padding(.vertical)

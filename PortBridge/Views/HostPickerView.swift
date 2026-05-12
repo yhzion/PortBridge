@@ -17,6 +17,8 @@ struct HostPickerView: View {
             .labelsHidden()
             .frame(maxWidth: 200)
             .onChange(of: vm.selectedHost) { _, newHost in
+                vm.lastError = nil
+                vm.ports = []
                 guard newHost != nil else { return }
                 Task { await vm.scan() }
             }

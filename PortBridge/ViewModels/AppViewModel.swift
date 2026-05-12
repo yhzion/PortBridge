@@ -38,6 +38,7 @@ final class AppViewModel {
     }
 
     func loadHosts() {
+        lastError = nil
         do {
             hosts = try parser()
         } catch let error as PortBridgeError {
@@ -49,6 +50,7 @@ final class AppViewModel {
 
     func scan() async {
         guard let host = selectedHost else { return }
+        lastError = nil
         isScanning = true
         defer { isScanning = false }
         do {
@@ -84,6 +86,7 @@ final class AppViewModel {
     }
 
     private func startForwarding(host: String, remotePort: Int, localPort: Int) async {
+        lastError = nil
         let placeholderID = UUID()
         let placeholder = Forwarding(
             id: placeholderID,
