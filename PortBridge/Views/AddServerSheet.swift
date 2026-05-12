@@ -31,12 +31,12 @@ struct AddServerSheet: View {
                 .font(.headline)
 
             Form {
-                TextField("표시 이름 (선택사항)", text: $name)
-                TextField("사용자", text: $user)
+                TextField(text: $name, prompt: Text("선택사항")) { Text("이름") }
+                TextField(text: $user, prompt: Text("user")) { Text("사용자") }
                     .disableAutocorrection(true)
-                TextField("호스트 (IP 또는 hostname)", text: $host)
+                TextField(text: $host, prompt: Text("hostname 또는 IP")) { Text("호스트") }
                     .disableAutocorrection(true)
-                TextField("포트", text: $portText)
+                TextField(text: $portText, prompt: Text("22")) { Text("포트") }
             }
             .formStyle(.grouped)
 
