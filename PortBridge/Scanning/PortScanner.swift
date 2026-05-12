@@ -6,7 +6,7 @@ struct PortScanner {
     let sshExecutable: String = "/usr/bin/ssh"
 
     func scan(server: Server, range: ClosedRange<Int> = 1000...65535) async throws -> [RemotePort] {
-        let remoteCommand = "ss -tlnH 2>/dev/null || lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null"
+        let remoteCommand = "ss -tlnpH 2>/dev/null || lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null"
         let args = [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=10",

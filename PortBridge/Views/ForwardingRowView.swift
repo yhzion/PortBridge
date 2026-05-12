@@ -23,25 +23,27 @@ struct ForwardingRowView: View {
         }
     }
 
-    private var addressLabel: String {
+    private var addressMeaning: String {
         switch port.address {
-        case "0.0.0.0", "::": return "모든 인터페이스에서 수신"
-        case "127.0.0.1", "::1": return "로컬에서만 수신"
-        default: return "수신 주소 \(port.address)"
+        case "0.0.0.0", "::": return "모든 인터페이스"
+        case "127.0.0.1", "::1": return "로컬 전용"
+        default: return port.address
         }
     }
 
     private var stateLabel: String? {
+        let server = forwarding?.serverDisplayName
+        let serverPrefix = server.map { "\($0) · " } ?? ""
         switch forwarding?.state {
         case .starting:
-            return "포워딩 연결 중…"
+            return "\(serverPrefix)포워딩 연결 중…"
         case .active:
             if let local = forwarding?.localPort {
-                return "내 PC의 localhost:\(local) → 리모트 \(port.port) 로 포워딩 중"
+                return "\(serverPrefix):\(local) → 리모트 :\(port.port) 포워딩 중"
             }
-            return "포워딩 중"
+            return "\(serverPrefix)포워딩 중"
         case .error:
-            return "포워딩 실패 — 클릭해 다시 시도"
+            return "\(serverPrefix)포워딩 실패 — 클릭해 다시 시도"
         case .idle, .none:
             return nil
         }
@@ -54,30 +56,9 @@ struct ForwardingRowView: View {
             statusIndicator
                 .frame(width: 18, height: 18)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(verbatim: "포트 " + String(port.port))
-                        .font(.system(.body, design: .monospaced).weight(.semibold))
-                    if let proc = port.processName {
-                        Text(verbatim: proc)
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.15), in: Capsule())
-                    }
-                    if let name = forwarding?.serverDisplayName {
-                        Text(verbatim: name)
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .foregroundStyle(.tint)
-                            .background(Color.accentColor.opacity(0.12), in: Capsule())
-                    }
-                }
-                Text(stateLabel ?? addressLabel)
-                    .font(.caption)
-                    .foregroundStyle(isErrorState ? .red : .secondary)
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                primaryLine
+                secondaryLine
             }
 
             Spacer(minLength: 4)
@@ -100,6 +81,48 @@ struct ForwardingRowView: View {
             onToggle()
         }
         .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
+    }
+
+    @ViewBuilder
+    private var primaryLine: some View {
+        if let proc = port.processName, !proc.isEmpty {
+            Text(verbatim: proc)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else {
+            Text("열린 포트")
+                .font(.headline)
+                .fontWeight(.regular)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var secondaryLine: some View {
+        if let label = stateLabel {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(isErrorState ? .red : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else {
+            HStack(spacing: 6) {
+                Text(verbatim: ":\(port.port)")
+                    .font(.system(.caption, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("·")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Text(addressMeaning)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
     }
 
     @ViewBuilder
