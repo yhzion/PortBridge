@@ -65,6 +65,14 @@ struct ForwardingRowView: View {
                             .padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.15), in: Capsule())
                     }
+                    if let name = forwarding?.serverDisplayName {
+                        Text(verbatim: name)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .foregroundStyle(.tint)
+                            .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    }
                 }
                 Text(stateLabel ?? addressLabel)
                     .font(.caption)

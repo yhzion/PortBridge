@@ -136,7 +136,7 @@ private struct AuthFailedView: View {
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
-                .foregroundStyle(copied ? .green : .tint)
+                .foregroundStyle(copied ? Color.green : Color.accentColor)
             }
         }
         .padding(.vertical, 4)
