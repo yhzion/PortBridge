@@ -119,16 +119,18 @@ var inactivePorts: [RemotePort] {
 }
 ```
 
-기존 `startForwarding`을 수정:
-- placeholder append 직후 `activatedAt[placeholderID] = Date()`.
-- 성공 시 placeholder id를 그대로 유지하는 방향이 단순하므로 키 이동 불필요 (현재 코드는 `forwardings[idx] = fw` 로 새 `Forwarding` 인스턴스를 넣으므로 id 보존 여부 확인 필요 — TunnelManager가 새 UUID를 발급한다면 placeholder id를 그대로 사용하도록 수정하거나, 성공 시 `activatedAt[newID] = activatedAt.removeValue(forKey: placeholderID)` 로 이전).
-- 실패해서 제거될 때 `activatedAt[id] = nil`.
+기존 `startForwarding`을 수정 (현재 `TunnelManager.start`는 새 `Forwarding`을 반환하므로 placeholder id ≠ 성공 시 id):
+
+- placeholder append 직후: `activatedAt[placeholderID] = Date()`.
+- `tunnels.start` 성공 시: `activatedAt[fw.id] = activatedAt.removeValue(forKey: placeholderID) ?? Date()`.
+- 포트 충돌(`forwardingDiedEarly` + "address already in use"): `activatedAt[placeholderID] = nil` (conflict sheet 해결 후 재시도 시 새 placeholder가 다시 시각을 기록).
+- 그 외 실패로 placeholder 제거 시: `activatedAt[placeholderID] = nil`.
 
 기존 `toggleForwarding`의 off 분기:
 - `activatedAt[existing.id] = nil`.
 
 `tunnelDidExit` (error 진입):
-- 정렬은 유지되어야 하므로 `activatedAt`은 건드리지 않음.
+- `forwardings[idx].state`만 변경되어 id가 유지됨 → `activatedAt`은 건드리지 않음 (정렬 위치 유지).
 
 신규 메서드:
 
