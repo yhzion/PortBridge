@@ -24,6 +24,19 @@ final class AppViewModel {
         return false
     }
 
+    var allExpanded: Bool {
+        serverSections.allSatisfy(\.isExpanded)
+    }
+
+    func toggleAllExpanded() {
+        let shouldExpand = !allExpanded
+        for section in serverSections {
+            if section.isExpanded != shouldExpand {
+                section.toggleExpanded()
+            }
+        }
+    }
+
     init(
         store: ServerStore = ServerStore(),
         scanner: PortScanner = PortScanner(runner: ProcessCommandRunner()),
