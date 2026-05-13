@@ -10,7 +10,7 @@ struct AllServersSectionHeader: View {
             Text(verbatim: "모든 서버 · \(count)")
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundStyle(.primary)
+                .foregroundStyle(.tint)
             Spacer()
             Button(allExpanded ? "모두 접기" : "모두 펼치기", action: onToggleAll)
                 .buttonStyle(.borderless)
