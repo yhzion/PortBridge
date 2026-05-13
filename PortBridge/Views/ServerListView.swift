@@ -74,16 +74,28 @@ struct ServerListView: View {
             }
 
             // 서버별 섹션
-            ForEach(vm.serverSections) { section in
-                ServerSectionView(
-                    section: section,
-                    activeForwardings: vm.activeForwardings,
-                    matches: { vm.matches($0) },
-                    onToggle: { port in
-                        Task { await vm.toggleForwarding(serverId: section.server.id, for: port) }
-                    },
-                    onEdit: { editingServer = section.server },
-                    onDelete: { vm.deleteServer(section.server) }
+            Section {
+                ForEach(vm.serverSections) { section in
+                    ServerSectionView(
+                        section: section,
+                        activeForwardings: vm.activeForwardings,
+                        matches: { vm.matches($0) },
+                        onToggle: { port in
+                            Task { await vm.toggleForwarding(serverId: section.server.id, for: port) }
+                        },
+                        onEdit: { editingServer = section.server },
+                        onDelete: { vm.deleteServer(section.server) }
+                    )
+                }
+            } header: {
+                AllServersSectionHeader(
+                    count: vm.serverSections.count,
+                    allExpanded: vm.allExpanded,
+                    onToggleAll: {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            vm.toggleAllExpanded()
+                        }
+                    }
                 )
             }
         }
