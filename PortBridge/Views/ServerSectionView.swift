@@ -24,12 +24,9 @@ struct ServerSectionView: View {
     }
 
     var body: some View {
-        Section {
-            if section.isExpanded {
-                sectionContent
-            }
-        } header: {
-            sectionHeader
+        sectionHeader
+        if section.isExpanded {
+            sectionContent
         }
     }
 
