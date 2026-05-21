@@ -6,6 +6,8 @@ struct ForwardingRowView: View {
     let forwarding: Forwarding?
     let serverDisplayName: String?
     let onToggle: () -> Void
+    let isFavorite: Bool
+    let onFavoriteToggle: () -> Void
 
     private var isStarting: Bool {
         forwarding?.state == .starting
@@ -56,6 +58,17 @@ struct ForwardingRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
+            Button(action: onFavoriteToggle) {
+                Image(systemName: isFavorite ? "star.fill" : "star")
+                    .foregroundStyle(isFavorite ? Color.accentColor : Color.secondary)
+                    .imageScale(.medium)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가")
+            .help(isFavorite ? "즐겨찾기에서 제거" : "즐겨찾기에 추가")
+
             statusIndicator
                 .frame(width: 18, height: 18)
 
@@ -202,7 +215,9 @@ private struct OpenInBrowserButton: View {
         port: RemotePort(port: 8080, address: "0.0.0.0", processName: "nginx"),
         forwarding: nil,
         serverDisplayName: nil,
-        onToggle: {}
+        onToggle: {},
+        isFavorite: false,
+        onFavoriteToggle: {}
     )
     .padding()
     .frame(width: 420)
@@ -213,7 +228,9 @@ private struct OpenInBrowserButton: View {
         port: RemotePort(port: 5432, address: "127.0.0.1", processName: "postgres"),
         forwarding: Forwarding(serverId: UUID(), remotePort: 5432, localPort: 5432, state: .starting),
         serverDisplayName: "db-01",
-        onToggle: {}
+        onToggle: {},
+        isFavorite: false,
+        onFavoriteToggle: {}
     )
     .padding()
     .frame(width: 420)
@@ -224,7 +241,9 @@ private struct OpenInBrowserButton: View {
         port: RemotePort(port: 6443, address: "0.0.0.0", processName: nil),
         forwarding: Forwarding(serverId: UUID(), remotePort: 6443, localPort: 6443, state: .active),
         serverDisplayName: "k8s-master",
-        onToggle: {}
+        onToggle: {},
+        isFavorite: true,
+        onFavoriteToggle: {}
     )
     .padding()
     .frame(width: 420)
@@ -235,7 +254,9 @@ private struct OpenInBrowserButton: View {
         port: RemotePort(port: 3389, address: "0.0.0.0", processName: "rdp"),
         forwarding: Forwarding(serverId: UUID(), remotePort: 3389, localPort: 3389, state: .error("connection refused")),
         serverDisplayName: "win-vm",
-        onToggle: {}
+        onToggle: {},
+        isFavorite: false,
+        onFavoriteToggle: {}
     )
     .padding()
     .frame(width: 420)

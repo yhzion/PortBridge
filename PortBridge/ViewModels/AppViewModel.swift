@@ -16,6 +16,8 @@ final class AppViewModel {
     private(set) var activeForwardings: [Forwarding] = []
     var pendingPortConflict: PortConflict?
     private(set) var errors: [ErrorToast] = []
+    let favorites: FavoriteStore
+    let preferences: AppPreferences
     var searchText: String = "" {
         didSet { normalizedSearchQuery = Self.normalize(searchText) }
     }
@@ -68,12 +70,16 @@ final class AppViewModel {
     init(
         store: ServerStore = ServerStore(),
         scanner: PortScanner = PortScanner(runner: ProcessCommandRunner()),
-        tunnels: TunnelManaging? = nil
+        tunnels: TunnelManaging? = nil,
+        favorites: FavoriteStore = FavoriteStore(),
+        preferences: AppPreferences? = nil
     ) {
         self.store = store
         self.scanner = scanner
         let t: TunnelManaging = tunnels ?? TunnelManager()
         self.tunnels = t
+        self.favorites = favorites
+        self.preferences = preferences ?? AppPreferences.production()
         t.delegate = self
         rebuildSections()
     }
@@ -96,6 +102,70 @@ final class AppViewModel {
     /// View 렌더링 시점에 사용. `Forwarding`이 서버 이름을 복제하지 않고 SSoT(ServerStore)에서 조회.
     func serverDisplayName(for serverId: UUID) -> String? {
         store.servers.first { $0.id == serverId }?.displayName
+    }
+
+    // MARK: - Favorites
+
+    func isFavorite(serverId: UUID, port: Int) -> Bool {
+        favorites.contains(FavoriteKey(serverId: serverId, remotePort: port))
+    }
+
+    func toggleFavorite(serverId: UUID, port: Int) {
+        favorites.toggle(FavoriteKey(serverId: serverId, remotePort: port))
+    }
+
+    var favoriteRows: [FavoriteRow] {
+        favorites.favorites.compactMap { key -> FavoriteRow? in
+            guard let server = store.servers.first(where: { $0.id == key.serverId }) else {
+                return nil
+            }
+            let forwarding = forwardings.first(where: {
+                $0.serverId == key.serverId && $0.remotePort == key.remotePort
+            })
+            let section = serverSections.first(where: { $0.server.id == key.serverId })
+            let processName = section?.ports.first(where: { $0.port == key.remotePort })?.processName
+            return FavoriteRow(
+                id: key,
+                serverDisplayName: server.displayName,
+                remotePort: key.remotePort,
+                localPort: forwarding?.localPort,
+                processName: processName,
+                state: forwarding?.state ?? .idle
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.serverDisplayName == rhs.serverDisplayName {
+                return lhs.remotePort < rhs.remotePort
+            }
+            return lhs.serverDisplayName < rhs.serverDisplayName
+        }
+    }
+
+    var nonFavoriteActive: [Forwarding] {
+        activeForwardings.filter { fw in
+            !isFavorite(serverId: fw.serverId, port: fw.remotePort)
+        }
+    }
+
+    /// 앱 시작 시 호출 — preferences.launchAtLogin이 true이면 즐겨찾기를 자동 시작.
+    /// `graceSeconds`는 부팅 후 VPN/네트워크 안정화 대기 (production: 5초, 테스트: 0).
+    func startFavoritesIfEnabled(graceSeconds: TimeInterval = 5) async {
+        guard preferences.launchAtLogin else { return }
+        if graceSeconds > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(graceSeconds * 1_000_000_000))
+        }
+        await withTaskGroup(of: Void.self) { group in
+            for key in favorites.favorites {
+                guard let section = serverSections.first(where: { $0.server.id == key.serverId }) else {
+                    continue
+                }
+                let server = section.server
+                let port = key.remotePort
+                group.addTask { @MainActor in
+                    await self.startForwarding(server: server, remotePort: port, localPort: port)
+                }
+            }
+        }
     }
 
     // MARK: - Server CRUD
@@ -247,3 +317,28 @@ extension AppViewModel: TunnelManagerDelegate {
         }
     }
 }
+
+struct FavoriteRow: Identifiable, Equatable {
+    let id: FavoriteKey
+    let serverDisplayName: String
+    let remotePort: Int
+    let localPort: Int?
+    let processName: String?
+    let state: Forwarding.State
+}
+
+#if DEBUG
+extension AppViewModel {
+    /// Test-only helper to inject an active forwarding state.
+    func _test_injectActiveForwarding(serverId: UUID, remotePort: Int, localPort: Int? = nil) {
+        let fw = Forwarding(
+            serverId: serverId,
+            remotePort: remotePort,
+            localPort: localPort ?? remotePort,
+            state: .active,
+            activatedAt: Date()
+        )
+        forwardings.append(fw)
+    }
+}
+#endif

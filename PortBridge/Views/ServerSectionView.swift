@@ -9,6 +9,8 @@ struct ServerSectionView: View {
     let onToggle: (RemotePort) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
+    let isFavorite: (RemotePort) -> Bool
+    let onFavoriteToggle: (RemotePort) -> Void
 
     private var activeCount: Int {
         activeForwardings.filter { $0.serverId == section.server.id }.count
@@ -72,7 +74,14 @@ struct ServerSectionView: View {
 
         case .loaded:
             ForEach(inactivePorts) { port in
-                ForwardingRowView(port: port, forwarding: nil, serverDisplayName: nil, onToggle: { onToggle(port) })
+                ForwardingRowView(
+                    port: port,
+                    forwarding: nil,
+                    serverDisplayName: nil,
+                    onToggle: { onToggle(port) },
+                    isFavorite: isFavorite(port),
+                    onFavoriteToggle: { onFavoriteToggle(port) }
+                )
             }
 
         case .offline:
