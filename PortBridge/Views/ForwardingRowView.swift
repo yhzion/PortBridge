@@ -69,33 +69,45 @@ struct ForwardingRowView: View {
             .accessibilityLabel(isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가")
             .help(isFavorite ? "즐겨찾기에서 제거" : "즐겨찾기에 추가")
 
-            statusIndicator
-                .frame(width: 18, height: 18)
+            Button(action: onToggle) {
+                HStack(alignment: .center, spacing: 10) {
+                    statusIndicator
+                        .frame(width: 18, height: 18)
 
-            if showPortColumn {
-                Text(verbatim: ":\(port.port)")
-                    .font(.system(.body, design: .monospaced).bold())
-                    .monospacedDigit()
-                    .foregroundStyle(isErrorState ? .red : isActive ? .green : .primary)
-                    .frame(minWidth: 48, alignment: .trailing)
-            }
+                    if showPortColumn {
+                        Text(verbatim: ":\(port.port)")
+                            .font(.system(.body, design: .monospaced).bold())
+                            .monospacedDigit()
+                            .foregroundStyle(isErrorState ? .red : isActive ? .green : .primary)
+                            .frame(minWidth: 48, alignment: .trailing)
+                    }
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(rightPrimary)
-                    .font(.caption)
-                    .foregroundStyle(rightPrimaryColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(rightPrimary)
+                            .font(.caption)
+                            .foregroundStyle(rightPrimaryColor)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
 
-                if let secondary = rightSecondary {
-                    Text(secondary)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                        if let secondary = rightSecondary {
+                            Text(secondary)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 4)
                 }
+                .contentShape(Rectangle())
             }
-
-            Spacer(minLength: 4)
+            .buttonStyle(.plain)
+            .disabled(isStarting)
+            .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
+            .accessibilityAddTraits(.isButton)
 
             if isActive, let local = forwarding?.localPort, isRowHovering {
                 OpenInBrowserButton(localPort: local)
@@ -108,17 +120,7 @@ struct ForwardingRowView: View {
             }
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
         .onHover { isRowHovering = $0 }
-        .onTapGesture {
-            guard !isStarting else { return }
-            onToggle()
-        }
-        .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
-        .accessibilityAddTraits(.isButton)
     }
 
     private var rightPrimary: String {
