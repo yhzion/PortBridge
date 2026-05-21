@@ -6,6 +6,8 @@ enum ServerScanState: Equatable {
     case idle
     case scanning
     case loaded([RemotePort])
+    case offline(isRetrying: Bool)
+    case toolMissing
     case error(String)
     case authFailed(copyCommand: String)
 }

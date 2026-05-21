@@ -57,6 +57,12 @@ struct ServerSectionView: View {
                 ForwardingRowView(port: port, forwarding: nil, onToggle: { onToggle(port) })
             }
 
+        case .offline:
+            EmptyView()
+
+        case .toolMissing:
+            EmptyView()
+
         case .error(let msg):
             Label(msg, systemImage: "exclamationmark.triangle")
                 .font(.caption)
