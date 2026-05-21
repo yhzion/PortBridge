@@ -11,7 +11,6 @@ final class AppViewModel {
 
     private(set) var serverSections: [ServerSectionViewModel] = []
     private(set) var forwardings: [Forwarding] = []
-    private(set) var activatedAt: [UUID: Date] = [:]
     var pendingPortConflict: PortConflict?
     private(set) var errors: [ErrorToast] = []
     var searchText: String = ""
@@ -78,7 +77,7 @@ final class AppViewModel {
                 }
             }
             .sorted {
-                activatedAt[$0.id, default: .distantPast] > activatedAt[$1.id, default: .distantPast]
+                ($0.activatedAt ?? .distantPast) > ($1.activatedAt ?? .distantPast)
             }
     }
 
@@ -124,7 +123,6 @@ final class AppViewModel {
     func toggleForwarding(serverId: UUID, for port: RemotePort) async {
         if let existing = forwardings.first(where: { $0.serverId == serverId && $0.remotePort == port.port }) {
             tunnels.stop(existing.id)
-            activatedAt[existing.id] = nil
             forwardings.removeAll { $0.id == existing.id }
             return
         }
@@ -143,7 +141,6 @@ final class AppViewModel {
         let mine = forwardings.filter { $0.serverId == serverId }
         for fw in mine {
             tunnels.stop(fw.id)
-            activatedAt[fw.id] = nil
         }
         forwardings.removeAll { $0.serverId == serverId }
     }
@@ -155,7 +152,6 @@ final class AppViewModel {
         guard !ids.isEmpty else { return }
         for id in ids {
             tunnels.stop(id)
-            activatedAt[id] = nil
         }
         forwardings.removeAll { ids.contains($0.id) }
     }
@@ -163,7 +159,6 @@ final class AppViewModel {
     func shutdownAll() {
         tunnels.shutdownAll()
         forwardings.removeAll()
-        activatedAt.removeAll()
     }
 
     // MARK: - Private
@@ -181,32 +176,29 @@ final class AppViewModel {
 
     private func startForwarding(server: Server, remotePort: Int, localPort: Int) async {
         let placeholderID = UUID()
+        let activated = Date()
         let placeholder = Forwarding(
             id: placeholderID,
             serverId: server.id,
             remotePort: remotePort,
             localPort: localPort,
-            state: .starting
+            state: .starting,
+            activatedAt: activated
         )
         forwardings.append(placeholder)
-        activatedAt[placeholderID] = Date()
 
         do {
-            let fw = try await tunnels.start(server: server, remotePort: remotePort, localPort: localPort)
+            var fw = try await tunnels.start(server: server, remotePort: remotePort, localPort: localPort)
+            fw.activatedAt = activated
             if let idx = forwardings.firstIndex(where: { $0.id == placeholderID }) {
                 forwardings[idx] = fw
-                if let ts = activatedAt.removeValue(forKey: placeholderID) {
-                    activatedAt[fw.id] = ts
-                }
             } else {
                 // placeholder was removed while start() was in-flight (user cancelled)
                 tunnels.stop(fw.id)
-                activatedAt[placeholderID] = nil
             }
         } catch PortBridgeError.forwardingDiedEarly(let stderr)
             where stderr.lowercased().contains("address already in use") {
             forwardings.removeAll { $0.id == placeholderID }
-            activatedAt[placeholderID] = nil
             pendingPortConflict = PortConflict(
                 serverId: server.id,
                 remotePort: remotePort,
@@ -214,11 +206,9 @@ final class AppViewModel {
             )
         } catch let error as PortBridgeError {
             forwardings.removeAll { $0.id == placeholderID }
-            activatedAt[placeholderID] = nil
             showError(error.errorDescription ?? error.localizedDescription)
         } catch {
             forwardings.removeAll { $0.id == placeholderID }
-            activatedAt[placeholderID] = nil
             showError(error.localizedDescription)
         }
     }
