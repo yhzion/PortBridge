@@ -44,9 +44,9 @@ struct PortScanner {
                 throw PortBridgeError.serverUnreachable(host: server.host, reason: result.stderr)
             }
 
-            // Task 4에서 추가: 도구 부재 분기
-            if result.stdout.isEmpty {
-                throw PortBridgeError.remoteCommandNotFound
+            // 3. 도구 부재
+            if result.exitCode == 127 || stderr.contains("portbridge_tools_missing") {
+                throw PortBridgeError.remoteToolsMissing
             }
         }
 

@@ -198,4 +198,44 @@ final class PortScannerTests: XCTestCase {
         XCTAssertTrue(args.contains("2222"), "args should contain port")
         XCTAssertTrue(args.contains("deploy@10.0.0.1"), "args should contain user@host")
     }
+
+    func test_toolsMissingMarker_throwsRemoteToolsMissing() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 127, stdout: "", stderr: "PORTBRIDGE_TOOLS_MISSING\n")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            XCTAssertEqual(error, .remoteToolsMissing)
+        }
+    }
+
+    func test_exit127WithoutMarker_throwsRemoteToolsMissing() async throws {
+        // 일부 셸은 stderr 출력 없이 127만 반환 — fallback으로도 잡혀야 함.
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 127, stdout: "", stderr: "")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            XCTAssertEqual(error, .remoteToolsMissing)
+        }
+    }
+
+    func test_emptyStdoutWithoutErrorSignal_returnsEmptyArray() async throws {
+        // 도구 부재가 아니라 단순히 listening 포트가 없는 경우 — 빈 배열 반환.
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 0, stdout: "", stderr: "")
+        ]
+        let scanner = PortScanner(runner: mock)
+        let ports = try await scanner.scan(server: makeServer())
+        XCTAssertEqual(ports.count, 0)
+    }
 }
