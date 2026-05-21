@@ -18,6 +18,7 @@ extension Notification.Name {
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let viewModel: AppViewModel
     private var statusItem: NSStatusItem?
+    private var badgeLayer: CALayer?
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -37,6 +38,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
 
         observeIconState()
+        updateBadge(visible: viewModel.updates.availableUpdate != nil)
     }
 
     // MARK: - Click routing
@@ -321,10 +323,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func observeIconState() {
         withObservationTracking { [weak self] in
             _ = self?.viewModel.isAnyFavoriteActive
+            _ = self?.viewModel.updates.availableUpdate
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
-                self?.refreshIcon()
-                self?.observeIconState()
+                guard let self else { return }
+                self.refreshIcon()
+                self.updateBadge(visible: self.viewModel.updates.availableUpdate != nil)
+                self.observeIconState()
             }
         }
     }
@@ -332,5 +337,32 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func refreshIcon() {
         let active = viewModel.isAnyFavoriteActive
         statusItem?.button?.image = MenuBarIconRenderer.image(active: active)
+    }
+
+    private func updateBadge(visible: Bool) {
+        guard let button = statusItem?.button else { return }
+        if visible {
+            if badgeLayer == nil {
+                button.wantsLayer = true
+                let layer = CALayer()
+                layer.backgroundColor = NSColor.systemBlue.cgColor
+                layer.cornerRadius = 2
+                button.layer?.addSublayer(layer)
+                badgeLayer = layer
+            }
+            layoutBadge()
+        } else {
+            badgeLayer?.removeFromSuperlayer()
+            badgeLayer = nil
+        }
+    }
+
+    private func layoutBadge() {
+        guard let button = statusItem?.button, let layer = badgeLayer else { return }
+        let size: CGFloat = 4
+        let inset: CGFloat = 1
+        let x = button.bounds.maxX - size - inset
+        let y = button.bounds.maxY - size - inset
+        layer.frame = CGRect(x: x, y: y, width: size, height: size)
     }
 }
