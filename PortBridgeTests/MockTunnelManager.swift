@@ -7,8 +7,9 @@ final class MockTunnelManager: TunnelManaging {
 
     var nextResult: Forwarding!
     var nextError: Error?
-    private(set) var startCalls: [(serverId: UUID, remotePort: Int, localPort: Int)] = []
+    private(set) var startCalls: [(server: Server, remotePort: Int, localPort: Int)] = []
     private(set) var stopCalls: [UUID] = []
+    private(set) var stopAndWaitCalls: [UUID] = []
     private(set) var shutdownAllCalled = false
 
     /// When true, `start` suspends until `resumeStart()` is called.
@@ -17,7 +18,7 @@ final class MockTunnelManager: TunnelManaging {
     private var suspendContinuation: CheckedContinuation<Void, Never>?
 
     func start(server: Server, remotePort: Int, localPort: Int) async throws -> Forwarding {
-        startCalls.append((server.id, remotePort, localPort))
+        startCalls.append((server, remotePort, localPort))
         if shouldSuspendStart {
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 suspendContinuation = cont
@@ -34,6 +35,10 @@ final class MockTunnelManager: TunnelManaging {
 
     func stop(_ id: UUID) {
         stopCalls.append(id)
+    }
+
+    func stopAndWait(_ id: UUID) async {
+        stopAndWaitCalls.append(id)
     }
 
     func shutdownAll() {
