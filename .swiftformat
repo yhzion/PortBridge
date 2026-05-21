@@ -1,0 +1,17 @@
+# SwiftFormat 설정 — PortBridge
+# 참고: https://github.com/nicklockwood/SwiftFormat/blob/main/Rules.md
+
+--swiftversion 6.0
+--indent 4
+--maxwidth 140
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+--commas inline
+--trimwhitespace always
+--stripunusedargs closure-only
+--self remove
+--header ignore
+
+--exclude .build,.claude,Pods,DerivedData,PortBridge.xcodeproj

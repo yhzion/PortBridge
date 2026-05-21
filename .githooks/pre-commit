@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Auto-format staged Swift files, re-stage them, then lint.
+# 주의: staged 파일에 unstaged 변경이 함께 있을 경우 같은 파일의 unstaged 부분이
+# 함께 commit될 수 있음. 단일 개발자 워크플로에서는 허용 가능한 트레이드오프.
+set -euo pipefail
+
+STAGED_SWIFT=$(git diff --cached --name-only --diff-filter=ACMR -- '*.swift' || true)
+[ -z "$STAGED_SWIFT" ] && exit 0
+
+for tool in swiftformat swiftlint; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "❌ $tool 가 설치되어 있지 않습니다."
+        echo "   ./scripts/setup-hooks.sh 를 실행하세요."
+        exit 1
+    fi
+done
+
+echo "→ swiftformat (auto-fix on staged files)"
+printf '%s\n' "$STAGED_SWIFT" | xargs swiftformat --quiet
+
+# Re-stage formatted files
+printf '%s\n' "$STAGED_SWIFT" | xargs git add
+
+echo "→ swiftlint"
+swiftlint --quiet

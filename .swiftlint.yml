@@ -1,0 +1,61 @@
+# SwiftLint 설정 — PortBridge
+# 참고: https://realm.github.io/SwiftLint/rule-directory.html
+
+excluded:
+  - .build
+  - .claude
+  - DerivedData
+  - PortBridge.xcodeproj
+  - Pods
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - explicit_init
+  - first_where
+  - force_unwrapping
+  - last_where
+  - sorted_first_last
+  - unused_import
+
+disabled_rules:
+  - todo                  # TODO/FIXME 주석 허용
+  - trailing_whitespace   # swiftformat 이 처리
+
+line_length:
+  warning: 140
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  excluded:
+    - id
+    - up
+    - to
+    - vm
+  min_length:
+    warning: 2
+    error: 1
+
+type_name:
+  min_length: 3
+  max_length:
+    warning: 50
+    error: 60
+
+function_body_length:
+  warning: 80
+  error: 150
+
+file_length:
+  warning: 600
+  error: 1000
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+# SwiftUI / @MainActor / Swift 6 코드에는 자주 발생하지만 의미 적은 규칙들
+nesting:
+  type_level: 2

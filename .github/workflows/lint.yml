@@ -1,0 +1,26 @@
+name: Lint & Dead Code
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          brew install swiftformat swiftlint
+          brew install peripheryapp/periphery/periphery
+
+      - name: SwiftFormat (lint)
+        run: swiftformat --lint .
+
+      - name: SwiftLint (strict)
+        run: swiftlint --strict
+
+      - name: Periphery (dead code scan)
+        run: periphery scan
