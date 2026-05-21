@@ -77,7 +77,7 @@ final class TunnelManager {
             localPort: localPort,
             state: .active
         )
-        let tunnel = ActiveTunnel(process: process, forwarding: forwarding, stderr: stderrBuffer)
+        let tunnel = ActiveTunnel(id: forwarding.id, process: process, stderr: stderrBuffer)
         active[forwarding.id] = tunnel
 
         let id = forwarding.id
@@ -130,14 +130,14 @@ protocol TunnelManagerDelegate: AnyObject {
 }
 
 final class ActiveTunnel {
+    let id: UUID
     let process: Process
-    var forwarding: Forwarding
     let stderr: StderrRingBuffer
     var monitorTask: Task<Void, Never>?
 
-    init(process: Process, forwarding: Forwarding, stderr: StderrRingBuffer) {
+    init(id: UUID, process: Process, stderr: StderrRingBuffer) {
+        self.id = id
         self.process = process
-        self.forwarding = forwarding
         self.stderr = stderr
     }
 }
