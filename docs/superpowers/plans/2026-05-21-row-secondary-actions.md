@@ -14,7 +14,8 @@
 
 ## 사전 상태
 
-- **워크트리**: `worktree-wcag-input-border` (base: `origin/main` @ `ad8b880`)
+- **워크트리**: `worktree-wcag-input-border` (base: `origin/main` @ `6f790bc`, Menu Bar Extras 머지 포함)
+- **선행 main 의존성**: `437cbfd feat(view): add leading star button to ForwardingRowView` — `ForwardingRowView`에 `isFavorite`·`onFavoriteToggle` 필드와 leading star Button(첫 자식)이 추가됨. **본 plan은 이 star Button을 보존하면서 동작하도록 "본문 영역만 outer Button으로 감싸는" 옵션 A 패턴을 적용한다**
 - **선행 미커밋 변경**: 워킹트리에 다음 변경이 staged 안 됨 — Task 0에서 처리
   - `PortBridge/Views/DesignTokens.swift` (WCAG inputBorder 라이트 톤 강화, 리뷰 항목 1번)
   - `PortBridge/ContentView.swift` (PortConflictSheet 입력 검증, 리뷰 항목 2번)
@@ -107,84 +108,99 @@ Expected: `** BUILD SUCCEEDED **`
 
 ---
 
-## Task 1: ForwardingRowView를 Button으로 래핑
+## Task 1: ForwardingRowView 본문 영역을 Button으로 래핑 (옵션 A)
 
-**목적:** 행 전체가 키보드 Tab stop이 되도록 SwiftUI `Button`으로 감싼다. 기존 `onTapGesture` 동작과 동등성을 유지하면서.
+**목적:** star Button을 보존하면서 행 본문(statusIndicator·포트·이름·브라우저)을 별도 outer Button으로 감싼다. 결과: star = Tab stop 1, 본문 = Tab stop 2, 브라우저 = Tab stop 3.
 
 **Files:**
-- Modify: `PortBridge/Views/ForwardingRowView.swift:57-109`
+- Modify: `PortBridge/Views/ForwardingRowView.swift:59-122`
 
 - [ ] **Step 1.1: 현재 body 구조 확인**
 
-Run: `sed -n '57,109p' PortBridge/Views/ForwardingRowView.swift`
-Expected: `var body: some View { HStack(...) ... .onTapGesture { ... onToggle() } ... }`
+Run: `sed -n '59,122p' PortBridge/Views/ForwardingRowView.swift`
+Expected: leading star Button, statusIndicator, port column, VStack, Spacer, OpenInBrowserButton (hover gated), error icon — 모두 `HStack` 단일 자식. 외부에 `.onTapGesture { onToggle() }`와 `.accessibilityElement(.combine)`.
 
-- [ ] **Step 1.2: body의 HStack을 Button label로 감싸기**
+- [ ] **Step 1.2: body 전체를 옵션 A 구조로 재작성**
 
-`PortBridge/Views/ForwardingRowView.swift` 의 `var body: some View { ... }` 블록을 다음으로 교체:
+`var body: some View { ... }` 블록 전체를 다음으로 교체:
 
 ```swift
 var body: some View {
-    Button(action: onToggle) {
-        HStack(alignment: .center, spacing: 10) {
-            statusIndicator
+    HStack(alignment: .center, spacing: 10) {
+        Button(action: onFavoriteToggle) {
+            Image(systemName: isFavorite ? "star.fill" : "star")
+                .foregroundStyle(isFavorite ? Color.accentColor : Color.secondary)
+                .imageScale(.medium)
                 .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가")
+        .help(isFavorite ? "즐겨찾기에서 제거" : "즐겨찾기에 추가")
 
-            if showPortColumn {
-                Text(verbatim: ":\(port.port)")
-                    .font(.system(.body, design: .monospaced).bold())
-                    .monospacedDigit()
-                    .foregroundStyle(isErrorState ? .red : isActive ? .green : .primary)
-                    .frame(minWidth: 48, alignment: .trailing)
-            }
+        Button(action: onToggle) {
+            HStack(alignment: .center, spacing: 10) {
+                statusIndicator
+                    .frame(width: 18, height: 18)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(rightPrimary)
-                    .font(.caption)
-                    .foregroundStyle(rightPrimaryColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                if showPortColumn {
+                    Text(verbatim: ":\(port.port)")
+                        .font(.system(.body, design: .monospaced).bold())
+                        .monospacedDigit()
+                        .foregroundStyle(isErrorState ? .red : isActive ? .green : .primary)
+                        .frame(minWidth: 48, alignment: .trailing)
+                }
 
-                if let secondary = rightSecondary {
-                    Text(secondary)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(rightPrimary)
+                        .font(.caption)
+                        .foregroundStyle(rightPrimaryColor)
                         .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if let secondary = rightSecondary {
+                        Text(secondary)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                if isActive, let local = forwarding?.localPort, isRowHovering {
+                    OpenInBrowserButton(localPort: local)
+                }
+
+                if case .error(let msg) = forwarding?.state {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .help(String(msg))
                 }
             }
-
-            Spacer(minLength: 4)
-
-            if isActive, let local = forwarding?.localPort, isRowHovering {
-                OpenInBrowserButton(localPort: local)
-            }
-
-            if case .error(let msg) = forwarding?.state {
-                Image(systemName: "info.circle")
-                    .foregroundStyle(.secondary)
-                    .help(String(msg))
-            }
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .disabled(isStarting)
+        .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
+        .accessibilityAddTraits(.isButton)
     }
-    .buttonStyle(.plain)
-    .disabled(isStarting)
+    .padding(.vertical, 4)
     .onHover { isRowHovering = $0 }
-    .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(accessibilityLabel)
-    .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
-    .accessibilityAddTraits(.isButton)
 }
 ```
 
 변경 요점:
-- 기존 `HStack { ... }` 를 `Button(action: onToggle) { HStack { ... } .contentShape(Rectangle()) }` 로 감쌈
-- `.onTapGesture` 블록 제거 (Button action으로 대체)
-- `.disabled(isStarting)` 신설 — 기존 가드 `guard !isStarting else { return }` 대체
-- `OpenInBrowserButton` 노출 조건은 이 Task에서는 **그대로** 유지 (다음 Task에서 변경)
-- `.accessibilityElement(.combine)`·`.isButton`은 이 Task에서는 **그대로** 유지 (Task 3에서 변경)
+- **leading star Button은 그대로 보존** — outer HStack의 첫 자식, 독립 Tab stop
+- **본문 영역만 두 번째 `Button(action: onToggle)`로 감쌈** — chevron 충돌 방지
+- 기존 `.onTapGesture { ... onToggle() }` 제거 — outer 본문 Button action으로 대체
+- `.disabled(isStarting)`이 기존 `guard !isStarting else { return }` 역할 대신함
+- `.padding(.vertical, 4)`·`.onHover`는 outer HStack 레벨로 이동
+- `.help` / `.accessibilityElement` / `.accessibilityLabel` / `.accessibilityHint` / `.accessibilityAddTraits` 묶음은 본문 Button에 부착 (Task 3에서 `.contain`으로 바꾸고 `.isButton` 제거)
+- `OpenInBrowserButton` 노출 조건은 이 Task에서는 **그대로** 유지 (Task 2에서 변경)
 
 - [ ] **Step 1.3: 빌드 확인**
 
@@ -204,14 +220,16 @@ Expected: `** BUILD SUCCEEDED **`
 ```bash
 git add PortBridge/Views/ForwardingRowView.swift
 git commit -m "$(cat <<'EOF'
-refactor(forwarding-row): wrap row in Button for keyboard focus
+refactor(forwarding-row): wrap body region in Button (keep star)
 
-Replace .onTapGesture with Button(action:) wrapper so the row
-becomes a real Tab stop with native Enter/Space handling.
-Use .disabled(isStarting) in place of the manual guard.
+Split the row into two sibling Buttons: the existing star Button
+remains a leading Tab stop, and a new Button(action: onToggle)
+wraps the body region (status, port, name, browser). Replaces
+the row-wide .onTapGesture with native Button handling and adds
+.disabled(isStarting) in place of the manual guard.
 
-No visual change yet; accessibility tree restructuring follows
-in subsequent commits.
+No visual or VoiceOver tree change yet; accessibility refinements
+follow in subsequent commits.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -277,16 +295,16 @@ EOF
 
 ---
 
-## Task 3: ForwardingRowView 접근성 트리 재정리
+## Task 3: ForwardingRowView 본문 Button 접근성 트리 재정리
 
-**목적:** 행 라벨링을 `.combine` → `.contain`으로 바꿔 자식 OpenInBrowserButton이 VoiceOver에 별도 노드로 노출되게 한다. Button이 부여하는 자동 `.isButton` 트레잇을 신뢰해 명시 트레잇은 제거.
+**목적:** 본문 Button의 자식 OpenInBrowserButton이 VoiceOver에 별도 노드로 노출되도록 `.combine` → `.contain`. 본문이 SwiftUI Button이므로 `.isButton` 트레잇은 자동 부여 — 명시 제거.
 
 **Files:**
-- Modify: `PortBridge/Views/ForwardingRowView.swift` — Button 외부의 accessibility modifier 묶음
+- Modify: `PortBridge/Views/ForwardingRowView.swift` — 본문 `Button(action: onToggle)`의 accessibility modifier 묶음
 
-- [ ] **Step 3.1: accessibility modifier 묶음 교체**
+- [ ] **Step 3.1: 본문 Button의 accessibility modifier 교체**
 
-다음 modifier 묶음을:
+다음 modifier 묶음을 (Task 1.2에서 본문 Button에 부착해둔 묶음):
 
 ```swift
 .accessibilityElement(children: .combine)
@@ -299,14 +317,14 @@ EOF
 
 ```swift
 .accessibilityElement(children: .contain)
-.accessibilityLabel(accessibilityLabel)  // 기존 private computed property (현 코드 :127-133) 그대로 사용
+.accessibilityLabel(accessibilityLabel)  // 기존 private computed property (`accessibilityLabel`, 현 코드 :140-146) 그대로 사용
 .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
 ```
 
 변경 요점:
 - `.combine` → `.contain`: 자식 OpenInBrowserButton이 별도 노드로 노출됨
-- `.accessibilityAddTraits(.isButton)` 제거: 외부 Button이 자동 부여
-- `accessibilityLabel`은 기존 computed property 그대로
+- `.accessibilityAddTraits(.isButton)` 제거: 외부 본문 Button이 자동 부여
+- star Button의 accessibility(별도 label·help)는 영향 없음 — outer HStack의 형제이므로 독립 노드
 
 - [ ] **Step 3.2: 빌드 확인**
 
@@ -315,16 +333,17 @@ Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 3.3: VoiceOver 수동 점검**
 
-VoiceOver ⌘F5 ON:
-- Active 포워딩 행에 포커스 → 발화: "포트 8080, [서버명] · 포워딩 중, … 버튼. 이중 탭하여 포워딩 끄기"
-- VO 다음 항목 → "브라우저에서 열기 버튼"
-- Idle 행 → 발화에 브라우저 노드 **없음**
-- Tab으로도 동일 흐름: 행 → 브라우저 → 다음 행
+VoiceOver ⌘F5 ON, Active 포워딩 행 영역 흐름:
+- star 노드 발화: "즐겨찾기 추가 / 해제 버튼"
+- 본문 노드 발화: "포트 8080, [서버명] · 포워딩 중, … 버튼. 이중 탭하여 포워딩 끄기"
+- 다음 노드: "브라우저에서 열기 버튼"
+- Idle/Starting/Error 행 본문 다음 → 브라우저 노드 **없음**, 곧바로 다음 행 star
 
 VoiceOver ⌘F5 OFF (키보드만):
-- Tab으로 포워딩 행에 시각 포커스 링 표시
-- Enter → 토글
-- Tab → 브라우저 버튼 시각 포커스 → Space/Enter → 브라우저 열림
+- Tab 흐름: `star → 본문 → 브라우저(active) → 다음 행 star …`
+- 각 Tab stop에 시각 포커스 링이 보이는지 확인
+- 본문 포커스 + Enter → 토글
+- 브라우저 포커스 + Space/Enter → 브라우저 열림
 
 - [ ] **Step 3.4: 커밋**
 
@@ -350,7 +369,7 @@ EOF
 **목적:** chevron이 별도 VoiceOver 버튼 노드로 노출되어 작은 탭 영역을 형성하는 문제 해소. 시각적으로는 그대로지만 접근성 트리에서 사라진다.
 
 **Files:**
-- Modify: `PortBridge/Views/ServerSectionView.swift:112-125` (라인 번호는 main `ad8b880` 기준 — `activeCountAccessibility` 추가로 기존 :108-121에서 +4 밀림)
+- Modify: `PortBridge/Views/ServerSectionView.swift:121-134` (라인 번호는 main `6f790bc` 기준)
 
 - [ ] **Step 4.1: chevron Button → Image 교체**
 
@@ -433,109 +452,115 @@ EOF
 **목적:** ForwardingRow와 동일하게 행 전체를 Button으로 감싸 키보드 Tab stop + Enter/Space 처리를 얻는다.
 
 **Files:**
-- Modify: `PortBridge/Views/ServerSectionView.swift:110-182` (라인 번호는 main `ad8b880` 기준 — 기존 :106-178에서 +4 밀림)
+- Modify: `PortBridge/Views/ServerSectionView.swift:119-191` (라인 번호는 main `6f790bc` 기준)
 
 - [ ] **Step 5.1: 현재 sectionHeader 구조 확인**
 
-Run: `sed -n '110,182p' PortBridge/Views/ServerSectionView.swift`
+Run: `sed -n '119,191p' PortBridge/Views/ServerSectionView.swift`
 Expected: `private var sectionHeader: some View { HStack(spacing: 8) { ... } .padding(.vertical, 6) .contentShape(Rectangle()) .onTapGesture { handleRowTap() } }`
 
-- [ ] **Step 5.2: sectionHeader 본문을 Button label로 감싸기**
+- [ ] **Step 5.2: sectionHeader를 옵션 A 구조로 재작성**
 
-다음으로 `sectionHeader` computed property 전체를 교체:
+ForwardingRowView와 동일한 분리 원칙: **본문 영역(chevron + monogram + 이름 + count badge)만** 첫 번째 `Button(action: handleRowTap)`으로 감싸고, **refresh와 ellipsis는 outer HStack의 형제 Button**으로 유지.
+
+`sectionHeader` computed property 전체를 다음으로 교체:
 
 ```swift
 private var sectionHeader: some View {
-    Button(action: handleRowTap) {
-        HStack(spacing: 8) {
-            if !isOffline {
-                Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12)
-                    .transaction { $0.animation = nil }
-                    .accessibilityHidden(true)
-            } else {
-                Color.clear.frame(width: 12, height: 12)
-            }
-
-            ServerMonogram(server: section.server, status: statusDot, dimmed: isOffline)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(primaryLabel)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(isOffline ? .secondary : .primary)
-                    .lineLimit(1)
-                Text(secondaryLabel)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            if activeCount > 0 && !isOffline {
-                Text(verbatim: "\(activeCount)")
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.tint)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Color.PB.accentBadgeBg, in: Capsule())
-                    .help("이 서버에서 포워딩 중인 포트 수")
-                    .accessibilityLabel(activeCountAccessibility)
-            }
-
-            if case .scanning = section.scanState {
-                ProgressView().controlSize(.small)
-            } else if !isOffline {
-                Button { Task { await section.scan() } } label: {
-                    Image(systemName: "arrow.clockwise").font(.body).foregroundStyle(.secondary)
+    HStack(spacing: 8) {
+        Button(action: handleRowTap) {
+            HStack(spacing: 8) {
+                if !isOffline {
+                    Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                        .transaction { $0.animation = nil }
+                        .accessibilityHidden(true)
+                } else {
+                    Color.clear.frame(width: 12, height: 12)
                 }
-                .buttonStyle(.plain)
-                .help("\(primaryLabel) 포트 재스캔")
-                .accessibilityLabel("\(primaryLabel) 포트 재스캔")
-            }
 
-            Menu {
-                Button("편집…", action: onEdit)
-                Divider()
-                Button("삭제", role: .destructive, action: onDelete)
-            } label: {
-                Image(systemName: "ellipsis").font(.body).foregroundStyle(.secondary)
+                ServerMonogram(server: section.server, status: statusDot, dimmed: isOffline)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(primaryLabel)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(isOffline ? .secondary : .primary)
+                        .lineLimit(1)
+                    Text(secondaryLabel)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if activeCount > 0 && !isOffline {
+                    Text(verbatim: "\(activeCount)")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.tint)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.PB.accentBadgeBg, in: Capsule())
+                        .help("이 서버에서 포워딩 중인 포트 수")
+                        .accessibilityLabel(activeCountAccessibility)
+                }
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 20)
-            .accessibilityLabel("\(primaryLabel) 더보기")
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+
+        if case .scanning = section.scanState {
+            ProgressView().controlSize(.small)
+        } else if !isOffline {
+            Button { Task { await section.scan() } } label: {
+                Image(systemName: "arrow.clockwise").font(.body).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("\(primaryLabel) 포트 재스캔")
+            .accessibilityLabel("\(primaryLabel) 포트 재스캔")
+        }
+
+        Menu {
+            Button("편집…", action: onEdit)
+            Divider()
+            Button("삭제", role: .destructive, action: onDelete)
+        } label: {
+            Image(systemName: "ellipsis").font(.body).foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 20)
+        .accessibilityLabel("\(primaryLabel) 더보기")
     }
-    .buttonStyle(.plain)
+    .padding(.vertical, 6)
 }
 ```
 
 변경 요점:
-- 외부 `HStack(spacing: 8) { ... }` 를 `Button(action: handleRowTap) { HStack { ... } .padding(.vertical, 6) .contentShape(Rectangle()) }` 로 감쌈
-- `.onTapGesture { handleRowTap() }` 제거
-- 내부 자식 `Button`(refresh)·`Menu`(ellipsis)는 그대로 유지 — SwiftUI는 중첩 Button을 별도 hit target으로 처리
-- 접근성 modifier는 다음 Task(6)에서 일괄 추가
+- **outer HStack** 유지. 그 안에 세 형제: 본문 Button / refresh Button(또는 ProgressView) / Menu
+- **본문 Button**이 chevron·monogram·이름·badge를 감쌈 — Tab stop 1
+- refresh와 ellipsis Menu는 본문 Button **바깥**에 있어 독립 Tab stop — 부모 Button과 hit testing 충돌 회피
+- 외부의 `.onTapGesture { handleRowTap() }` 제거 — 본문 Button action으로 대체
+- `.padding(.vertical, 6)`는 outer HStack 레벨, `.contentShape(Rectangle())`는 본문 Button 안 HStack에
+- 접근성 modifier는 Task 6에서 본문 Button에 부착
 
 - [ ] **Step 5.3: 빌드 확인**
 
 Run: `xcodebuild -project PortBridge.xcodeproj -scheme PortBridge -configuration Debug build 2>&1 | tail -3`
 Expected: `** BUILD SUCCEEDED **`
 
-- [ ] **Step 5.4: 자식 Button/Menu 충돌 검증 (스펙 §7 비결정 사항)**
+- [ ] **Step 5.4: 본문/형제 Button 분리 동작 검증**
 
-수동 점검:
-- 서버 행의 가운데 영역(이름·호스트) 클릭 → 펼침/접힘 정상
-- refresh 버튼만 클릭 → 재스캔 시작 (행 확장은 일어나지 **않음**)
-- ellipsis 메뉴 클릭 → 메뉴가 열림 (행 확장 일어나지 **않음**)
-- 만약 자식 클릭이 행 toggle도 함께 일으키면, 자식 Button에 `.simultaneousGesture(TapGesture().onEnded { })` 또는 `.allowsHitTesting` 처리가 필요 — 발견 시 같은 커밋에서 보완
+옵션 A에서는 refresh·ellipsis가 본문 Button **바깥**의 형제이므로 hit testing 충돌은 구조적으로 발생하지 않아야 함. 수동 점검:
+- 본문 영역(chevron + monogram + 이름) 클릭 → 펼침/접힘
+- refresh 버튼 클릭 → 재스캔만 트리거, 펼침/접힘 **안 일어남**
+- ellipsis 메뉴 클릭 → 메뉴 열림, 펼침/접힘 **안 일어남**
+- 만약 outer HStack 사이 빈 공간(spacing) 클릭 시 무반응이라면 정상 — 본문 영역도 형제도 아니므로
 
 - [ ] **Step 5.5: Tab focus 링 가시성 (스펙 §7 비결정 사항)**
 
@@ -548,12 +573,13 @@ Expected: `** BUILD SUCCEEDED **`
 ```bash
 git add PortBridge/Views/ServerSectionView.swift
 git commit -m "$(cat <<'EOF'
-refactor(server-section): wrap row in Button for keyboard focus
+refactor(server-section): wrap body region in Button (option A)
 
-Mirror the ForwardingRowView pattern: the entire row HStack
-becomes a Button(action: handleRowTap) label so the row itself
-is a Tab stop with Enter/Space handling. Inner refresh and
-ellipsis buttons remain independent hit targets.
+Mirror the ForwardingRowView split: the body region (chevron,
+monogram, name, count badge) is wrapped in a single
+Button(action: handleRowTap) for keyboard focus and Enter/Space
+handling, while refresh and ellipsis remain sibling Buttons
+outside it. Avoids nested-Button hit-testing ambiguity.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -569,32 +595,30 @@ EOF
 **Files:**
 - Modify: `PortBridge/Views/ServerSectionView.swift` — Task 5 결과 sectionHeader의 modifier 묶음
 
-- [ ] **Step 6.1: 외부 Button에 접근성 modifier 추가**
+- [ ] **Step 6.1: 본문 Button에 접근성 modifier 추가**
 
-Task 5에서 만든 `sectionHeader`의 끝에 있는
-
-```swift
-    .buttonStyle(.plain)
-}
-```
-
-부분을 다음으로 교체:
+Task 5.2에서 작성한 `sectionHeader`의 본문 Button — `.buttonStyle(.plain)` 줄을 찾아 그 직후에 modifier를 부착:
 
 ```swift
-    .buttonStyle(.plain)
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel("\(primaryLabel) \(secondaryLabel)")
-    .accessibilityValue(isOffline ? "오프라인" : (section.isExpanded ? "펼침" : "접힘"))
-    .accessibilityHint(isOffline
-        ? "이중 탭하여 재스캔"
-        : "이중 탭하여 \(section.isExpanded ? "접기" : "펼치기")")
-}
+        }
+        .buttonStyle(.plain)
+
+        // ↓ 추가 ↓
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(primaryLabel) \(secondaryLabel)")
+        .accessibilityValue(isOffline ? "오프라인" : (section.isExpanded ? "펼침" : "접힘"))
+        .accessibilityHint(isOffline
+            ? "이중 탭하여 재스캔"
+            : "이중 탭하여 \(section.isExpanded ? "접기" : "펼치기")")
+
+        if case .scanning = section.scanState {  // ← 기존 형제 코드 그대로
 ```
 
 변경 요점:
-- `.contain`: 자식 refresh Button·Menu가 별도 노드로 노출됨
-- `.accessibilityLabel`: 서버명 + 호스트:포트 (기존 `primaryLabel`, `secondaryLabel` computed 활용)
-- `.accessibilityValue`: 상태 토큰. 오프라인이면 "오프라인", 온라인이면 "펼침"/"접힘"
+- modifier는 **본문 Button**에만 부착 — refresh/ellipsis는 자신의 라벨을 그대로 유지하므로 영향 없음
+- `.contain`: 본문 안의 자식 ServerMonogram·count badge는 `.accessibilityHidden(true)` 또는 자체 label로 처리되므로 트리에 노이즈 안 남김
+- `.accessibilityLabel`: 서버명 + 호스트:포트
+- `.accessibilityValue`: 상태 토큰. 오프라인 / 펼침 / 접힘
 - `.accessibilityHint`: 이중 탭 시 동작 안내
 
 - [ ] **Step 6.2: 빌드 확인**
@@ -645,12 +669,13 @@ Expected: `** BUILD SUCCEEDED **`
 
 Xcode ⌘R → 메뉴바 PortBridge 클릭. 다음을 모두 통과해야 한다:
 
-- [ ] 첫 Tab → 검색창 또는 첫 서버 행에 시각 포커스 링
-- [ ] Tab 흐름: `서버 행 → refresh → ⋯ → 포워딩 행 → 브라우저(active) → 다음 행 …`
-- [ ] 서버 행 포커스 + Enter → 펼침/접힘 토글
-- [ ] 오프라인 서버 행 포커스 + Enter → 재스캔 트리거
-- [ ] 포워딩 행(active) 포커스 + Enter → 포워딩 끄기 (상태 dot 변화)
-- [ ] 포워딩 행(idle) 포커스 + Enter → 포워딩 켜기
+- [ ] 첫 Tab → 검색창 또는 첫 서버 본문에 시각 포커스 링
+- [ ] Tab 흐름: `서버 본문 → refresh → ⋯ → 포워딩 star → 포워딩 본문 → 브라우저(active) → 다음 포워딩 star …`
+- [ ] 서버 본문 포커스 + Enter → 펼침/접힘 토글
+- [ ] 오프라인 서버 본문 포커스 + Enter → 재스캔 트리거
+- [ ] 포워딩 본문(active) 포커스 + Enter → 포워딩 끄기 (상태 dot 변화)
+- [ ] 포워딩 본문(idle) 포커스 + Enter → 포워딩 켜기
+- [ ] star Button 포커스 + Space/Enter → 즐겨찾기 토글 (icon star ↔ star.fill)
 - [ ] 브라우저 버튼 포커스 + Space 또는 Enter → 기본 브라우저에서 `http://localhost:N` 열림
 - [ ] Shift+Tab 역방향 흐름 정상
 
@@ -658,13 +683,14 @@ Xcode ⌘R → 메뉴바 PortBridge 클릭. 다음을 모두 통과해야 한다
 
 VoiceOver ON:
 
-- [ ] 서버 행 발화: "[이름] [user@host:port], 펼침/접힘/오프라인. 이중 탭하여 …"
+- [ ] 서버 본문 발화: "[이름] [user@host:port], 펼침/접힘/오프라인. 이중 탭하여 …"
 - [ ] chevron이 별도 노드로 들리지 **않음**
-- [ ] 포워딩 행 발화: "포트 N, [서버] · 포워딩 중/대기, 이중 탭하여 포워딩 끄기/켜기"
-- [ ] Active 포워딩 다음 노드 = "브라우저에서 열기 버튼"
-- [ ] Idle/Starting 행은 브라우저 노드 **없음**
-- [ ] refresh 노드 = "[서버명] 포트 재스캔 버튼"
-- [ ] ellipsis 노드 = "[서버명] 더보기 메뉴"
+- [ ] refresh 노드 = "[서버명] 포트 재스캔 버튼" (본문 다음)
+- [ ] ellipsis 노드 = "[서버명] 더보기 메뉴" (refresh 다음)
+- [ ] 포워딩 star 노드 = "즐겨찾기 추가 / 해제 버튼"
+- [ ] 포워딩 본문 발화: "포트 N, [서버] · 포워딩 중/대기, 이중 탭하여 포워딩 끄기/켜기"
+- [ ] Active 포워딩 본문 다음 노드 = "브라우저에서 열기 버튼"
+- [ ] Idle/Starting 행은 브라우저 노드 **없음**, 본문 다음 곧바로 다음 행 star
 
 VoiceOver OFF 복원.
 
