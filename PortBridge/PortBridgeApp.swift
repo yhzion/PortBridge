@@ -6,7 +6,7 @@ struct PortBridgeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environment(delegate.viewModel)
         }
@@ -14,6 +14,14 @@ struct PortBridgeApp: App {
             // ⌘N은 ServerListView에서 "서버 추가"에 사용하므로 기본 "새 창" 바인딩 해제.
             CommandGroup(replacing: .newItem) {}
         }
+
+        MenuBarExtra {
+            MenuBarContent()
+                .environment(delegate.viewModel)
+        } label: {
+            Image(systemName: "arrow.triangle.swap")
+        }
+        .menuBarExtraStyle(.menu)
     }
 }
 
@@ -32,6 +40,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.viewModel = AppViewModel()
         super.init()
         AppSingleInstance.startActivationObserver()
+    }
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // 영속화된 사용자 선택을 깜빡임 없이 즉시 반영
+        NSApp.setActivationPolicy(viewModel.preferences.showInDock ? .regular : .accessory)
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // 즐겨찾기 자동 시작 — launchAtLogin이 켜져 있을 때만
+        Task { @MainActor in
+            await viewModel.startFavoritesIfEnabled()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
