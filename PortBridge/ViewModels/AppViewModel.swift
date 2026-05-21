@@ -222,10 +222,6 @@ final class AppViewModel {
     /// 단일 forwarding 토글은 `toggleForwarding(serverId:for:)`를 사용하면 됩니다.
     /// 그 함수가 idempotent하지 않다는 점에 주의 — 같은 상태로 호출하면 반대로 뒤집습니다.
     /// 따라서 "전부 ON" 작업에서는 이미 active인 항목을 건드리면 오히려 끄게 됩니다.
-    ///
-    /// TODO(직접 작성): 아래 함수 본문 구현. favoriteRows를 순회하면서
-    /// 현재 모드(끄기 모드 vs 켜기 모드)에 따라 적절한 항목만 toggleForwarding 호출.
-    /// 비동기 동시 실행에는 withTaskGroup 사용을 권장합니다 (startFavoritesIfEnabled 참고).
     func toggleAllFavorites() async {
         let shouldTurnOff = isAnyFavoriteActive
         let targets = favoriteRows.filter { row in
