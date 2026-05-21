@@ -180,89 +180,146 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertEqual(fetcher.callCount, 1)
     }
 
-    func test_notifiesOnFirstDetection() async {
-        let notifier = MockUpdateNotifier()
+    // MARK: - Presenter behavior
+
+    func test_autoCheck_presentsAvailableOnFirstDetection() async {
+        let presenter = MockUpdatePresenter()
         let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
         let checker = UpdateChecker(
             fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
             currentVersion: SemanticVersion(string: "0.1.0"),
-            notifier: notifier
+            presenter: presenter
         )
         await checker.checkNow()
-        XCTAssertEqual(notifier.notifyCalls.count, 1)
-        XCTAssertEqual(notifier.notifyCalls.first?.tagName, "v0.2.0")
-        XCTAssertEqual(checker.lastNotifiedVersion, SemanticVersion(string: "0.2.0"))
+        XCTAssertEqual(presenter.availableCalls.count, 1)
+        XCTAssertEqual(presenter.availableCalls.first?.tagName, "v0.2.0")
     }
 
-    func test_doesNotNotifyTwiceForSameVersion() async {
-        let notifier = MockUpdateNotifier()
+    func test_autoCheck_doesNotRepresentSameVersionOnSecondCheck() async {
+        let presenter = MockUpdatePresenter()
         let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
         let checker = UpdateChecker(
             fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
             currentVersion: SemanticVersion(string: "0.1.0"),
-            notifier: notifier
+            presenter: presenter
         )
         await checker.checkNow()
         await checker.checkNow()
-        XCTAssertEqual(notifier.notifyCalls.count, 1)
+        XCTAssertEqual(presenter.availableCalls.count, 1)
     }
 
-    func test_manualCheck_notifiesUpToDate_whenAlreadyLatest() async {
-        let notifier = MockUpdateNotifier()
+    func test_autoCheck_representsWhenHigherVersionAppears() async {
+        let presenter = MockUpdatePresenter()
         let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
         let checker = UpdateChecker(
             fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
-            currentVersion: SemanticVersion(string: "0.2.0"),
-            notifier: notifier
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            presenter: presenter
+        )
+        await checker.checkNow()
+        fetcher.result = .success(release("v0.3.0"))
+        await checker.checkNow()
+        XCTAssertEqual(presenter.availableCalls.count, 2)
+    }
+
+    func test_manualCheck_presentsAvailableEveryTime() async {
+        let presenter = MockUpdatePresenter()
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            presenter: presenter
         )
         await checker.checkNow(manual: true)
-        XCTAssertEqual(notifier.upToDateCalls, ["0.2.0"])
-        XCTAssertTrue(notifier.notifyCalls.isEmpty)
-        XCTAssertTrue(notifier.failedCalls.isEmpty)
+        await checker.checkNow(manual: true)
+        XCTAssertEqual(presenter.availableCalls.count, 2)
     }
 
-    func test_autoCheck_doesNotNotifyOnUpToDate() async {
-        let notifier = MockUpdateNotifier()
+    func test_manualCheck_presentsUpToDate_whenAlreadyLatest() async {
+        let presenter = MockUpdatePresenter()
         let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
         let checker = UpdateChecker(
             fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
             currentVersion: SemanticVersion(string: "0.2.0"),
-            notifier: notifier
+            presenter: presenter
         )
-        await checker.checkNow()
-        XCTAssertTrue(notifier.upToDateCalls.isEmpty)
+        await checker.checkNow(manual: true)
+        XCTAssertEqual(presenter.upToDateCalls, ["0.2.0"])
+        XCTAssertTrue(presenter.availableCalls.isEmpty)
+        XCTAssertTrue(presenter.failedCalls.isEmpty)
     }
 
-    func test_manualCheck_notifiesFailed_onNetworkError() async {
-        let notifier = MockUpdateNotifier()
+    func test_autoCheck_doesNotPresentOnUpToDate() async {
+        let presenter = MockUpdatePresenter()
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.2.0"),
+            presenter: presenter
+        )
+        await checker.checkNow()
+        XCTAssertTrue(presenter.upToDateCalls.isEmpty)
+    }
+
+    func test_manualCheck_presentsFailed_onNetworkError() async {
+        let presenter = MockUpdatePresenter()
         let fetcher = MockReleaseFetcher(
             result: .failure(UpdateCheckError.network(URLError(.notConnectedToInternet)))
         )
         let checker = UpdateChecker(
             fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
             currentVersion: SemanticVersion(string: "0.1.0"),
-            notifier: notifier
+            presenter: presenter
         )
         await checker.checkNow(manual: true)
-        XCTAssertEqual(notifier.failedCalls.count, 1)
+        XCTAssertEqual(presenter.failedCalls.count, 1)
         XCTAssertTrue(
-            notifier.failedCalls[0].contains("Network"),
-            "Expected human-readable network reason, got: \(notifier.failedCalls[0])"
+            presenter.failedCalls[0].contains("Network"),
+            "Expected human-readable network reason, got: \(presenter.failedCalls[0])"
         )
     }
 
-    func test_notifiesAgainForHigherVersion() async {
-        let notifier = MockUpdateNotifier()
+    func test_autoCheck_doesNotPresentOnFailed() async {
+        let presenter = MockUpdatePresenter()
+        let fetcher = MockReleaseFetcher(
+            result: .failure(UpdateCheckError.httpStatus(500))
+        )
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            presenter: presenter
+        )
+        await checker.checkNow()
+        XCTAssertTrue(presenter.failedCalls.isEmpty)
+    }
+
+    func test_skipChoice_marksVersionSkipped() async {
+        let presenter = MockUpdatePresenter()
+        presenter.availableResponses = [.skip]
         let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
         let checker = UpdateChecker(
             fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
             currentVersion: SemanticVersion(string: "0.1.0"),
-            notifier: notifier
+            presenter: presenter
         )
-        await checker.checkNow()
+        await checker.checkNow(manual: true)
+        XCTAssertEqual(checker.skippedVersion, SemanticVersion(string: "0.2.0"))
+        if case .upToDate = checker.phase { } else {
+            XCTFail("Expected .upToDate after Skip, got \(checker.phase)")
+        }
+    }
 
-        fetcher.result = .success(release("v0.3.0"))
-        await checker.checkNow()
-        XCTAssertEqual(notifier.notifyCalls.count, 2)
+    func test_remindLaterChoice_leavesAvailable() async {
+        let presenter = MockUpdatePresenter()
+        presenter.availableResponses = [.remindLater]
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            presenter: presenter
+        )
+        await checker.checkNow(manual: true)
+        XCTAssertNil(checker.skippedVersion)
+        XCTAssertEqual(checker.phase, .available(release("v0.2.0")))
     }
 }

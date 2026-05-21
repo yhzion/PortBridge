@@ -20,12 +20,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var badgeLayer: CALayer?
 
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
-
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
         super.init()
@@ -78,56 +72,16 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         menu.autoenablesItems = false
 
-        // Update available (only when a non-skipped newer release exists)
-        if let release = viewModel.updates.availableUpdate {
-            let tag = release.tagName
-            let item = NSMenuItem(
-                title: "Update available — \(tag)",
-                action: #selector(openReleasePage(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = release.htmlURL
-            item.image = NSImage(
-                systemSymbolName: "arrow.down.circle.fill",
-                accessibilityDescription: nil
-            )
-
-            let submenu = NSMenu()
-            let skip = NSMenuItem(
-                title: "Skip This Version",
-                action: #selector(skipCurrentRelease),
-                keyEquivalent: ""
-            )
-            skip.target = self
-            submenu.addItem(skip)
-
-            let notes = NSMenuItem(
-                title: "Show Release Notes…",
-                action: #selector(openReleasePage(_:)),
-                keyEquivalent: ""
-            )
-            notes.target = self
-            notes.representedObject = release.htmlURL
-            submenu.addItem(notes)
-
-            item.submenu = submenu
-            menu.addItem(item)
-            menu.addItem(.separator())
-        } else if case .upToDate(let at) = viewModel.updates.phase {
-            let item = NSMenuItem(
-                title: "Up to date · \(Self.relativeFormatter.localizedString(for: at, relativeTo: Date()))",
-                action: nil,
-                keyEquivalent: ""
-            )
-            item.isEnabled = false
-            item.image = NSImage(
-                systemSymbolName: "checkmark.circle",
-                accessibilityDescription: nil
-            )
-            menu.addItem(item)
-            menu.addItem(.separator())
-        }
+        // Installed version (always visible).
+        let versionString = Bundle.main.currentVersion?.string ?? "unknown"
+        let versionItem = NSMenuItem(
+            title: "PortBridge \(versionString)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+        menu.addItem(.separator())
 
         // Favorites
         let favHeader = NSMenuItem(title: "Favorites", action: nil, keyEquivalent: "")
@@ -229,13 +183,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(autoCheckItem)
 
         let checkNowItem: NSMenuItem
-        if case .failed = viewModel.updates.phase {
-            checkNowItem = NSMenuItem(
-                title: "Check failed — try again",
-                action: #selector(checkForUpdatesNow),
-                keyEquivalent: ""
-            )
-        } else if case .checking = viewModel.updates.phase {
+        if case .checking = viewModel.updates.phase {
             checkNowItem = NSMenuItem(title: "Checking…", action: nil, keyEquivalent: "")
             checkNowItem.isEnabled = false
         } else {
@@ -315,15 +263,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-
-    @objc private func openReleasePage(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    @objc private func skipCurrentRelease() {
-        viewModel.updates.skipCurrent()
     }
 
     @objc private func toggleAutomaticUpdateCheck() {
