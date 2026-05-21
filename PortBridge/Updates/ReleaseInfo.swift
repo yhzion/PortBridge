@@ -1,6 +1,6 @@
 import Foundation
 
-struct ReleaseInfo: Decodable, Equatable {
+nonisolated struct ReleaseInfo: Decodable, Equatable {
     let tagName: String
     let name: String?
     let htmlURL: URL

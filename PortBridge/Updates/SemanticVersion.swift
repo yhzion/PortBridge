@@ -1,6 +1,6 @@
 import Foundation
 
-struct SemanticVersion: Comparable, Hashable {
+nonisolated struct SemanticVersion: Comparable, Hashable {
     let major: Int
     let minor: Int
     let patch: Int
