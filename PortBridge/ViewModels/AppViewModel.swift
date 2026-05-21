@@ -25,6 +25,7 @@ final class AppViewModel {
     private(set) var errors: [ErrorToast] = []
     let favorites: FavoriteStore
     let preferences: AppPreferences
+    let updates: UpdateChecker
     var searchText: String = "" {
         didSet { normalizedSearchQuery = Self.normalize(searchText) }
     }
@@ -78,7 +79,8 @@ final class AppViewModel {
         scanner: PortScanner? = nil,
         tunnels: TunnelManaging? = nil,
         favorites: FavoriteStore? = nil,
-        preferences: AppPreferences? = nil
+        preferences: AppPreferences? = nil,
+        updates: UpdateChecker? = nil
     ) {
         self.store = store ?? ServerStore()
         self.scanner = scanner ?? PortScanner(runner: ProcessCommandRunner())
@@ -86,6 +88,17 @@ final class AppViewModel {
         self.tunnels = manager
         self.favorites = favorites ?? FavoriteStore()
         self.preferences = preferences ?? AppPreferences.production()
+        let resolvedPrefs = self.preferences
+        self.updates = updates ?? UpdateChecker(
+            fetcher: GitHubReleaseFetcher(
+                owner: "yhzion",
+                repo: "PortBridge",
+                currentAppVersion: Bundle.main.currentVersion?.string ?? "0.0.0"
+            ),
+            defaults: .standard,
+            preferences: resolvedPrefs,
+            currentVersion: Bundle.main.currentVersion
+        )
         manager.delegate = self
         rebuildSections()
     }
