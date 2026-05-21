@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class PortBridgeErrorTests: XCTestCase {
     func test_sshAuthFailed_includesHost() {

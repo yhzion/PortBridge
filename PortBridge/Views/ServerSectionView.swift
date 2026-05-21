@@ -1,6 +1,6 @@
 // PortBridge/Views/ServerSectionView.swift
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct ServerSectionView: View {
     let section: ServerSectionViewModel
@@ -85,7 +85,7 @@ struct ServerSectionView: View {
             }
 
         case .offline:
-            EmptyView()   // 안전망 — body는 isOffline 분기로 이미 미렌더되지만 switch exhaustiveness 위해 유지
+            EmptyView() // 안전망 — body는 isOffline 분기로 이미 미렌더되지만 switch exhaustiveness 위해 유지
 
         case .toolMissing:
             ToolInstallGuideView()
@@ -209,8 +209,8 @@ struct ServerSectionView: View {
 enum ServerStatusDot: Equatable {
     case none
     case offline(pulse: Bool)
-    case warning   // 노랑 — toolMissing / authFailed
-    case online    // 녹색
+    case warning // 노랑 — toolMissing / authFailed
+    case online // 녹색
 
     var fill: Color? {
         switch self {
@@ -355,8 +355,8 @@ private struct AuthFailedView: View {
 private struct ToolInstallGuideView: View {
     private let commands: [(distro: String, command: String)] = [
         ("Debian / Ubuntu", "sudo apt install iproute2 lsof"),
-        ("RHEL / CentOS",   "sudo yum install iproute lsof"),
-        ("Alpine",          "apk add iproute2 lsof"),
+        ("RHEL / CentOS", "sudo yum install iproute lsof"),
+        ("Alpine", "apk add iproute2 lsof")
     ]
 
     var body: some View {

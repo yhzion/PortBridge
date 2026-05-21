@@ -1,6 +1,6 @@
 // PortBridge/Tunneling/TunnelManager.swift
-import Foundation
 import Darwin
+import Foundation
 
 @MainActor
 protocol TunnelManaging: AnyObject {

@@ -1,6 +1,6 @@
+import AppKit
 import Foundation
 import Observation
-import AppKit
 import ServiceManagement
 
 @MainActor
@@ -49,13 +49,13 @@ final class AppPreferences {
         self.applyLaunchAtLogin = applyLaunchAtLogin
 
         if defaults.object(forKey: showInDockKey) == nil {
-            self.showInDock = true
+            showInDock = true
         } else {
-            self.showInDock = defaults.bool(forKey: showInDockKey)
+            showInDock = defaults.bool(forKey: showInDockKey)
         }
 
         let systemEnabled = readLaunchAtLogin()
-        self.launchAtLogin = systemEnabled
+        launchAtLogin = systemEnabled
         defaults.set(systemEnabled, forKey: launchAtLoginKey)
     }
 }

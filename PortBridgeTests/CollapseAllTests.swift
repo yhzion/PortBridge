@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 @MainActor
 final class CollapseAllTests: XCTestCase {
@@ -22,7 +22,9 @@ final class CollapseAllTests: XCTestCase {
 
     private func makeVM(servers: [Server] = []) -> AppViewModel {
         let store = ServerStore(defaults: defaults)
-        for server in servers { store.add(server) }
+        for server in servers {
+            store.add(server)
+        }
         return AppViewModel(store: store)
     }
 

@@ -21,7 +21,7 @@ actor MockCommandRunner: CommandRunner {
 
     func run(_ executable: String, args: [String], timeout: TimeInterval) async throws -> CommandResult {
         calls.append(Call(executable: executable, args: args))
-        if let error = error { throw error }
+        if let error { throw error }
         guard !responses.isEmpty else {
             return CommandResult(exitCode: 0, stdout: "", stderr: "")
         }

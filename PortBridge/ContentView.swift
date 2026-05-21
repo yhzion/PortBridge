@@ -92,7 +92,7 @@ struct PortConflictSheet: View {
     /// 유효 로컬 포트: 1–65535이며 충돌난 포트와 달라야 함.
     private var parsedPort: Int? {
         guard let p = Int(localPortText.trimmingCharacters(in: .whitespaces)),
-              (1...65535).contains(p),
+              (1 ... 65535).contains(p),
               p != conflict.attemptedLocal else { return nil }
         return p
     }
@@ -100,7 +100,7 @@ struct PortConflictSheet: View {
     private var validationMessage: String? {
         let trimmed = localPortText.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return nil }
-        guard let p = Int(trimmed), (1...65535).contains(p) else {
+        guard let p = Int(trimmed), (1 ... 65535).contains(p) else {
             return "1–65535 범위의 숫자여야 합니다"
         }
         if p == conflict.attemptedLocal {

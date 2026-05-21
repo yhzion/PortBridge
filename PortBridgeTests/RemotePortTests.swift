@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class RemotePortTests: XCTestCase {
     func test_id_combinesAddressAndPort() {

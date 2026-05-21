@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 @main
 struct PortBridgeApp: App {
@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // so we treat startup cleanup as the authoritative source of correctness.
             TunnelManager.cleanupOrphanedTunnels()
         }
-        self.viewModel = AppViewModel()
+        viewModel = AppViewModel()
         super.init()
         AppSingleInstance.startActivationObserver()
     }
@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 메뉴바 아이콘 + 좌/우클릭 핸들러 설치
         let controller = MenuBarController(viewModel: viewModel)
         controller.install()
-        self.menuBarController = controller
+        menuBarController = controller
 
         // 즐겨찾기 자동 시작 — launchAtLogin이 켜져 있을 때만
         Task { @MainActor in

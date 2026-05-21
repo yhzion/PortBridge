@@ -5,7 +5,7 @@ nonisolated struct PortScanner {
     let runner: CommandRunner
     let sshExecutable: String = "/usr/bin/ssh"
 
-    func scan(server: Server, range: ClosedRange<Int> = 1000...65535) async throws -> [RemotePort] {
+    func scan(server: Server, range: ClosedRange<Int> = 1000 ... 65535) async throws -> [RemotePort] {
         let remoteCommand = """
         if ! command -v ss >/dev/null 2>&1 && ! command -v lsof >/dev/null 2>&1; then
           echo PORTBRIDGE_TOOLS_MISSING >&2
@@ -39,7 +39,7 @@ nonisolated struct PortScanner {
                 "connection refused",
                 "could not resolve hostname", "name or service not known",
                 "network is unreachable",
-                "host is down",
+                "host is down"
             ]
             if unreachablePatterns.contains(where: { stderr.contains($0) }) {
                 throw PortBridgeError.serverUnreachable(host: server.host, reason: result.stderr)
@@ -52,11 +52,10 @@ nonisolated struct PortScanner {
         }
 
         let first = result.stdout.components(separatedBy: .newlines).first ?? ""
-        let parsed: [RemotePort]
-        if first.uppercased().hasPrefix("LISTEN") || first.contains("State") {
-            parsed = ScanOutputParser.parseSS(result.stdout)
+        let parsed: [RemotePort] = if first.uppercased().hasPrefix("LISTEN") || first.contains("State") {
+            ScanOutputParser.parseSS(result.stdout)
         } else {
-            parsed = ScanOutputParser.parseLsof(result.stdout)
+            ScanOutputParser.parseLsof(result.stdout)
         }
 
         let deduped = Self.deduplicateSamePort(parsed)

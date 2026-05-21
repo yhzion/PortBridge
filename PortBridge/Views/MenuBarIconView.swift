@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// V2 변종: ∩ 아치 + ─ 베이스. ON 상태에서 아치 안에 점(트래픽 흐름).
 /// 24×24 viewBox 좌표계로 그리고 frame 크기에 비례해 스케일됨.
@@ -54,8 +54,10 @@ enum MenuBarIconRenderer {
     static func image(active: Bool, size: CGFloat = 18) -> NSImage {
         let renderer = ImageRenderer(content: MenuBarIconView(active: active, size: size))
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
-        let fallback = NSImage(systemSymbolName: "arrow.triangle.swap",
-                               accessibilityDescription: "PortBridge")
+        let fallback = NSImage(
+            systemSymbolName: "arrow.triangle.swap",
+            accessibilityDescription: "PortBridge"
+        )
             ?? NSImage(size: NSSize(width: size, height: size))
         guard let nsImage = renderer.nsImage else {
             fallback.isTemplate = true
@@ -63,7 +65,7 @@ enum MenuBarIconRenderer {
         }
         nsImage.isTemplate = true
         nsImage.accessibilityDescription = active ? "PortBridge — Forwarding active"
-                                                  : "PortBridge — Idle"
+            : "PortBridge — Idle"
         return nsImage
     }
 }
@@ -71,7 +73,7 @@ enum MenuBarIconRenderer {
 #Preview {
     HStack(spacing: 24) {
         VStack { MenuBarIconView(active: false); Text("OFF").font(.caption2) }
-        VStack { MenuBarIconView(active: true);  Text("ON").font(.caption2)  }
+        VStack { MenuBarIconView(active: true); Text("ON").font(.caption2) }
     }
     .padding()
     .background(Color(.windowBackgroundColor))

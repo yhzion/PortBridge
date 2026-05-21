@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class ServerTests: XCTestCase {
     func test_displayName_withName_showsNameAndHost() {

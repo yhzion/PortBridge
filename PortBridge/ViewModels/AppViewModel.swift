@@ -13,6 +13,7 @@ final class AppViewModel {
     private(set) var forwardings: [Forwarding] = [] {
         didSet { recomputeActiveForwardings() }
     }
+
     private(set) var activeForwardings: [Forwarding] = []
     var pendingPortConflict: PortConflict?
     private(set) var errors: [ErrorToast] = []
@@ -21,6 +22,7 @@ final class AppViewModel {
     var searchText: String = "" {
         didSet { normalizedSearchQuery = Self.normalize(searchText) }
     }
+
     private(set) var normalizedSearchQuery: String = ""
 
     private let errorDisplayDuration: TimeInterval = 5
@@ -258,17 +260,19 @@ final class AppViewModel {
     func toggleAllFavorites() async {
         let shouldTurnOff = isAnyFavoriteActive
         let targets = favoriteRows.filter { row in
-            let isActive: Bool
-            switch row.state {
-            case .active, .starting: isActive = true
-            case .idle, .error:      isActive = false
+            let isActive = switch row.state {
+            case .active, .starting: true
+            case .idle, .error: false
             }
             return isActive == shouldTurnOff
         }
         await withTaskGroup(of: Void.self) { group in
             for row in targets {
-                let port = RemotePort(port: row.remotePort, address: "0.0.0.0",
-                                      processName: row.processName)
+                let port = RemotePort(
+                    port: row.remotePort,
+                    address: "0.0.0.0",
+                    processName: row.processName
+                )
                 let serverId = row.id.serverId
                 group.addTask { @MainActor in
                     await self.toggleForwarding(serverId: serverId, for: port)
@@ -405,17 +409,17 @@ struct FavoriteRow: Identifiable, Equatable {
 }
 
 #if DEBUG
-extension AppViewModel {
-    /// Test-only helper to inject an active forwarding state.
-    func _test_injectActiveForwarding(serverId: UUID, remotePort: Int, localPort: Int? = nil) {
-        let fw = Forwarding(
-            serverId: serverId,
-            remotePort: remotePort,
-            localPort: localPort ?? remotePort,
-            state: .active,
-            activatedAt: Date()
-        )
-        forwardings.append(fw)
+    extension AppViewModel {
+        /// Test-only helper to inject an active forwarding state.
+        func _test_injectActiveForwarding(serverId: UUID, remotePort: Int, localPort: Int? = nil) {
+            let fw = Forwarding(
+                serverId: serverId,
+                remotePort: remotePort,
+                localPort: localPort ?? remotePort,
+                state: .active,
+                activatedAt: Date()
+            )
+            forwardings.append(fw)
+        }
     }
-}
 #endif

@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class AppInstanceLockTests: XCTestCase {
     private var lockURL: URL!

@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class ProcessCommandRunnerTests: XCTestCase {
     func test_echo_returnsStdout() async throws {

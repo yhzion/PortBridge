@@ -45,7 +45,7 @@ nonisolated enum ScanOutputParser {
     fileprivate static func splitAddressPort(_ s: String) -> (String, Int)? {
         if s.hasPrefix("[") {
             guard let close = s.firstIndex(of: "]") else { return nil }
-            let addr = String(s[s.index(after: s.startIndex)..<close])
+            let addr = String(s[s.index(after: s.startIndex) ..< close])
             let afterClose = s.index(after: close)
             guard afterClose < s.endIndex, s[afterClose] == ":" else { return nil }
             let portStr = String(s[s.index(after: afterClose)...])
@@ -66,6 +66,6 @@ nonisolated enum ScanOutputParser {
         guard let quoteStart = rest.firstIndex(of: "\"") else { return nil }
         let afterQuote = rest.index(after: quoteStart)
         guard let quoteEnd = rest[afterQuote...].firstIndex(of: "\"") else { return nil }
-        return String(rest[afterQuote..<quoteEnd])
+        return String(rest[afterQuote ..< quoteEnd])
     }
 }

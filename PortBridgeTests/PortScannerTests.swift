@@ -1,6 +1,6 @@
 // PortBridgeTests/PortScannerTests.swift
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class PortScannerTests: XCTestCase {
     private func makeServer(user: String = "ubuntu", host: String = "prod", port: Int = 22) -> Server {
@@ -33,7 +33,7 @@ final class PortScannerTests: XCTestCase {
             )
         ])
         let scanner = PortScanner(runner: mock)
-        let ports = try await scanner.scan(server: makeServer(), range: 1000...65535)
+        let ports = try await scanner.scan(server: makeServer(), range: 1000 ... 65535)
         XCTAssertEqual(ports.count, 1)
         XCTAssertEqual(ports.first?.port, 3000)
     }
@@ -239,8 +239,8 @@ final class PortScannerTests: XCTestCase {
         XCTAssertEqual(ports.count, 0)
     }
 
-    // macOS BSD 소켓은 도달 불가 호스트에 대해 "Operation timed out"을 출력함
-    // (Linux는 "Connection timed out"). 두 표기 모두 .serverUnreachable로 분류되어야 함.
+    /// macOS BSD 소켓은 도달 불가 호스트에 대해 "Operation timed out"을 출력함
+    /// (Linux는 "Connection timed out"). 두 표기 모두 .serverUnreachable로 분류되어야 함.
     func test_operationTimedOut_throwsServerUnreachable() async throws {
         let mock = MockCommandRunner()
         await mock.setResponses([

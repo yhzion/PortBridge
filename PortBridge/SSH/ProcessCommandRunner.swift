@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated final class ProcessCommandRunner: CommandRunner, @unchecked Sendable {
+final nonisolated class ProcessCommandRunner: CommandRunner, @unchecked Sendable {
     func run(_ executable: String, args: [String], timeout: TimeInterval) async throws -> CommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -35,7 +35,7 @@ nonisolated final class ProcessCommandRunner: CommandRunner, @unchecked Sendable
 
             defer { group.cancelAll() }
             for try await result in group {
-                if let result = result { return result }
+                if let result { return result }
                 throw CommandError.timedOut
             }
             throw CommandError.launchFailed("no result")

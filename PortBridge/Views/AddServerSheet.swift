@@ -14,8 +14,13 @@ struct AddServerSheet: View {
     @State private var host: String = ""
     @State private var portText: String = "22"
 
-    private var trimmedUser: String { user.trimmingCharacters(in: .whitespaces) }
-    private var trimmedHost: String { host.trimmingCharacters(in: .whitespaces) }
+    private var trimmedUser: String {
+        user.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var trimmedHost: String {
+        host.trimmingCharacters(in: .whitespaces)
+    }
 
     private var isDuplicateInput: Bool {
         guard let isDuplicate, !trimmedUser.isEmpty, !trimmedHost.isEmpty, let p = parsedPort else {
@@ -34,11 +39,13 @@ struct AddServerSheet: View {
     /// 유효 SSH 포트: 1–65535. 0은 "임의 할당" 의미라 SSH 대상으로 부적합.
     private var parsedPort: Int? {
         guard let p = Int(portText.trimmingCharacters(in: .whitespaces)),
-              (1...65535).contains(p) else { return nil }
+              (1 ... 65535).contains(p) else { return nil }
         return p
     }
 
-    private var portValue: Int { parsedPort ?? 22 }
+    private var portValue: Int {
+        parsedPort ?? 22
+    }
 
     init(
         editing: Server? = nil,
