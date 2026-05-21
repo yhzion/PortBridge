@@ -269,12 +269,21 @@ private struct StatusDot: View {
             )
             .opacity(pulses ? (pulse ? 1.0 : 0.4) : 1.0)
             .scaleEffect(pulses ? (pulse ? 1.0 : 0.9) : 1.0)
-            .onAppear {
-                guard pulses else { return }
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                    pulse = true
+            .onAppear { startPulseIfNeeded() }
+            .onChange(of: pulses) { _, newValue in
+                if newValue {
+                    startPulseIfNeeded()
+                } else {
+                    withAnimation(.default) { pulse = false }
                 }
             }
+    }
+
+    private func startPulseIfNeeded() {
+        guard pulses else { return }
+        withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+            pulse = true
+        }
     }
 }
 
