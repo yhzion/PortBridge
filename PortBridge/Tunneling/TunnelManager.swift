@@ -77,7 +77,14 @@ final class TunnelManager: TunnelManaging {
             }
         }
 
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            stderrContinuation.finish()
+            await stderrConsumer.value
+            throw error
+        }
 
         try await Task.sleep(nanoseconds: 2_000_000_000)
         if !process.isRunning {
@@ -135,12 +142,11 @@ final class TunnelManager: TunnelManaging {
     }
 
     private func handleTunnelExit(id: UUID) async {
-        guard let tunnel = active[id] else { return }
+        guard let tunnel = active.removeValue(forKey: id) else { return }
         (tunnel.process.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
         tunnel.stderrContinuation.finish()
         await tunnel.stderrConsumer.value
         let stderr = await tunnel.stderr.snapshot()
-        active.removeValue(forKey: id)
         await delegate?.tunnelDidExit(id: id, stderr: stderr)
     }
 
