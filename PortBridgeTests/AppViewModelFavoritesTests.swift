@@ -20,7 +20,7 @@ final class AppViewModelFavoritesTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeViewModel() -> AppViewModel {
+    private func makeViewModel(tunnels: MockTunnelManager? = nil) -> AppViewModel {
         let serverStore = ServerStore(defaults: defaults)
         let favoriteStore = FavoriteStore(defaults: defaults)
         let preferences = AppPreferences(
@@ -32,7 +32,7 @@ final class AppViewModelFavoritesTests: XCTestCase {
         return AppViewModel(
             store: serverStore,
             scanner: PortScanner(runner: MockCommandRunner()),
-            tunnels: MockTunnelManager(),
+            tunnels: tunnels ?? MockTunnelManager(),
             favorites: favoriteStore,
             preferences: preferences
         )
@@ -121,5 +121,42 @@ final class AppViewModelFavoritesTests: XCTestCase {
         let active = vm.nonFavoriteActive
         XCTAssertEqual(active.count, 1)
         XCTAssertEqual(active.first?.remotePort, 9000)
+    }
+
+    func test_startFavoritesIfEnabled_skipsWhenLaunchAtLoginOff() async {
+        let vm = makeViewModel()
+        let s = Server(name: "x", user: "u", host: "h")
+        vm.addServer(s)
+        vm.toggleFavorite(serverId: s.id, port: 5432)
+        await vm.startFavoritesIfEnabled(graceSeconds: 0)
+        XCTAssertTrue(vm.activeForwardings.isEmpty)
+    }
+
+    func test_startFavoritesIfEnabled_startsFavoritesWhenEnabled() async {
+        let mockTunnels = MockTunnelManager()
+        let vm = makeViewModel(tunnels: mockTunnels)
+        let s = Server(name: "x", user: "u", host: "h")
+        vm.addServer(s)
+        mockTunnels.nextResult = Forwarding(
+            serverId: s.id,
+            remotePort: 5432,
+            localPort: 5432,
+            state: .active
+        )
+        vm.preferences.launchAtLogin = true
+        vm.toggleFavorite(serverId: s.id, port: 5432)
+        vm.toggleFavorite(serverId: s.id, port: 6379)
+        await vm.startFavoritesIfEnabled(graceSeconds: 0)
+        XCTAssertEqual(mockTunnels.startCalls.count, 2)
+    }
+
+    func test_startFavoritesIfEnabled_skipsOrphanedFavorites() async {
+        let mockTunnels = MockTunnelManager()
+        let vm = makeViewModel(tunnels: mockTunnels)
+        vm.preferences.launchAtLogin = true
+        let ghostServerId = UUID()
+        vm.toggleFavorite(serverId: ghostServerId, port: 5432)
+        await vm.startFavoritesIfEnabled(graceSeconds: 0)
+        XCTAssertTrue(mockTunnels.startCalls.isEmpty)
     }
 }

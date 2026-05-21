@@ -147,6 +147,27 @@ final class AppViewModel {
         }
     }
 
+    /// 앱 시작 시 호출 — preferences.launchAtLogin이 true이면 즐겨찾기를 자동 시작.
+    /// `graceSeconds`는 부팅 후 VPN/네트워크 안정화 대기 (production: 5초, 테스트: 0).
+    func startFavoritesIfEnabled(graceSeconds: TimeInterval = 5) async {
+        guard preferences.launchAtLogin else { return }
+        if graceSeconds > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(graceSeconds * 1_000_000_000))
+        }
+        await withTaskGroup(of: Void.self) { group in
+            for key in favorites.favorites {
+                guard let section = serverSections.first(where: { $0.server.id == key.serverId }) else {
+                    continue
+                }
+                let server = section.server
+                let port = key.remotePort
+                group.addTask { @MainActor in
+                    await self.startForwarding(server: server, remotePort: port, localPort: port)
+                }
+            }
+        }
+    }
+
     // MARK: - Server CRUD
 
     func addServer(_ server: Server) {
