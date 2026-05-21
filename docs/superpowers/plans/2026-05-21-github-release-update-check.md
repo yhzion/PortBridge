@@ -1263,85 +1263,7 @@ git commit -m "feat(updates): notify via system banner on first detection only"
 
 ---
 
-## Task 13: CI workflow — inject tag into MARKETING_VERSION
-
-**Files:**
-- Modify: `.github/workflows/release.yml`
-
-- [ ] **Step 1: Replace the "Build Release app" step** in `.github/workflows/release.yml` with:
-
-```yaml
-      - name: Build Release app
-        run: |
-          set -euo pipefail
-          # refs/tags/v0.2.0 → 0.2.0; for non-tag triggers, fall back to ref name
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Building MARKETING_VERSION=$VERSION (build ${GITHUB_RUN_NUMBER})"
-          xcodebuild \
-            -project PortBridge.xcodeproj \
-            -scheme PortBridge \
-            -configuration Release \
-            -derivedDataPath build/Release \
-            CODE_SIGNING_ALLOWED=NO \
-            MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
-            clean build
-```
-
-- [ ] **Step 2: Verify** that the existing upload step is still gated:
-
-```yaml
-      - name: Upload GitHub Release assets
-        if: startsWith(github.ref, 'refs/tags/')
-```
-
-This ensures `workflow_dispatch` runs (where `VERSION` becomes branch name) don't publish a malformed release.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add .github/workflows/release.yml
-git commit -m "ci(release): inject tag into MARKETING_VERSION at build time"
-```
-
-- [ ] **Step 4: Verification will happen at next release** — when tag `v0.2.0` is pushed, the built `.app`'s `CFBundleShortVersionString` should be `0.2.0`. No way to test this until then.
-
----
-
-## Task 14: pbxproj — align MARKETING_VERSION with current latest release
-
-**Files:**
-- Modify: `PortBridge.xcodeproj/project.pbxproj`
-
-**Context:** Currently the pbxproj has `MARKETING_VERSION = 1.0` but the latest release tag is `v0.1.0`. After Task 13, CI will inject the tag, so pbxproj's value only matters for local dev builds. We set it to match the currently published release so that a developer running locally without CI sees the "no update available" state when checking against the live GitHub release.
-
-- [ ] **Step 1: Replace `MARKETING_VERSION = 1.0;` everywhere in pbxproj with `MARKETING_VERSION = 0.1.0;`**
-
-```bash
-# From repo root:
-sed -i '' 's/MARKETING_VERSION = 1\.0;/MARKETING_VERSION = 0.1.0;/g' PortBridge.xcodeproj/project.pbxproj
-```
-
-- [ ] **Step 2: Verify** all occurrences updated:
-
-```bash
-grep -n 'MARKETING_VERSION' PortBridge.xcodeproj/project.pbxproj
-```
-
-Expected: every line shows `MARKETING_VERSION = 0.1.0;`.
-
-- [ ] **Step 3: Build the app locally** — confirm it still compiles and that the new value is reflected (in Xcode: General → Identity → Version should show `0.1.0`).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add PortBridge.xcodeproj/project.pbxproj
-git commit -m "chore(version): align pbxproj MARKETING_VERSION with latest release"
-```
-
----
-
-## Task 15: PRIVACY.md
+## Task 13: PRIVACY.md
 
 **Files:**
 - Create: `docs/PRIVACY.md`
@@ -1391,11 +1313,11 @@ git commit -m "docs: add PRIVACY.md covering update checks and SSH"
 
 ## Wrap-up
 
-After Task 15:
+After Task 13:
 
 - [ ] **Final verification — run the full test suite (⌘U)**. All tests should pass.
-- [ ] **Build & launch the app**. With the live `v0.1.0` release and pbxproj at `0.1.0`, the update check fires on launch but finds no newer version → no badge, no menu item, no banner. Console shows the check completed.
-- [ ] **Optional smoke test of the live happy path** — temporarily lower local `MARKETING_VERSION` (in Xcode → target Build Settings, not committed) to `0.0.1`, relaunch, and verify badge + menu item + banner all appear, "Skip" works, "Check Now" works.
+- [ ] **Build & launch the app locally**. The Run Script (`Scripts/inject-version.sh`, already on main) writes `CFBundleShortVersionString = "0.0.0"` and `CFBundleVersion = "dev-<sha>"` into the built `Info.plist` for untagged builds. `0.0.0 < 0.1.0` (current live release) → badge + menu item + banner all appear. This is the expected dev-build behavior (spec § 5).
+- [ ] **Verify "Skip This Version" hides the dot/item**, and that disabling "Check for Updates Automatically" stops launch-time checks but leaves "Check Now" functional.
 - [ ] **Push branch and open PR** (or sequence of PRs aligned to the 4 spec phases — see spec § 10).
 
-The next tagged release (`v0.2.0`) will validate the CI changes end-to-end: any user on `v0.1.0` (or older local dev build) will see the badge/menu/banner.
+The next tagged release (`v0.2.0`) will validate the end-to-end flow: `inject-version.sh` writes `0.2.0`, the GitHub Release workflow uploads it, and users still on `v0.1.0` see the badge/menu/banner on their next launch. **No CI workflow changes are needed** — version injection is already handled by the build phase.

@@ -29,7 +29,7 @@
 | 자동 체크 토글 | 제공 (기본 ON) | 회사 보안 정책 등 외부 통신 차단 사용자 배려 |
 | 에러 UX | 자동=조용히 로그, 수동="Check failed — try again" | 사용자 요청 여부에 따른 차등 |
 | 체크 시점 | 앱 시작 시 + 메뉴 "Check Now" 수동 + 24h debounce | 발견성과 비방해의 균형 |
-| 버전 정렬 | CI에서 태그 → `MARKETING_VERSION` 자동 주입 | 수동 동기화는 반드시 잊혀짐 |
+| 버전 정렬 | Run Script build phase (`Scripts/inject-version.sh`, 이미 main에 존재) | git tag/commit count를 빌드 시 `Info.plist`에 주입 — CI/로컬 일관 |
 
 ## 3. 컴포넌트 구조
 
@@ -229,6 +229,8 @@ extension Bundle {
 
 **비교 안전장치**: 현재 앱 버전 파싱이 실패하면 안전하게 "업데이트 없음"으로 간주 + `os_log` 경고. 사용자에게 가짜 알림보다 안전.
 
+**Dev 빌드 동작**: `Scripts/inject-version.sh`가 태그 없는 빌드에서 `CFBundleShortVersionString = "0.0.0"`을 주입한다. 이는 `SemanticVersion(string: "0.0.0")`으로 정상 파싱되며 라이브 release(예: `v0.1.0`)보다 낮아 자동 체크 시 "Update available"이 표시된다. 이는 의도된 동작 — dev에서도 새 release 인지가 가능. 노이즈가 거슬리면 메뉴의 "Check for Updates Automatically"를 끄면 된다.
+
 ## 6. UI 디테일
 
 ### 메뉴 구성 (`MenuBarController.buildMenu()`)
@@ -325,31 +327,20 @@ private let automaticUpdateCheckEnabledKey = "PortBridge.AutomaticUpdateCheckEna
 
 `launchAtLogin`/`showInDock`와 달리 시스템 API 적용이 없으므로 `apply*` 클로저 불필요.
 
-## 7. CI: 태그 → MARKETING_VERSION 자동 주입
+## 7. 버전 정렬 (이미 구현됨, 본 spec 작성 전)
 
-`.github/workflows/release.yml`의 Build step:
+main 커밋 `ae6b1aa`에서 `Scripts/inject-version.sh`를 Run Script build phase로 추가했다. 이 스크립트는 빌드 종료 시점에 `Info.plist`를 덮어쓴다:
 
-```yaml
-- name: Build Release app
-  run: |
-    set -euo pipefail
-    # refs/tags/v0.2.0 → 0.2.0
-    VERSION="${GITHUB_REF_NAME#v}"
-    xcodebuild \
-      -project PortBridge.xcodeproj \
-      -scheme PortBridge \
-      -configuration Release \
-      -derivedDataPath build/Release \
-      CODE_SIGNING_ALLOWED=NO \
-      MARKETING_VERSION="$VERSION" \
-      CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
-      clean build
-```
+- **태그 빌드** (CI 또는 로컬, `git describe --tags --abbrev=0`이 태그 반환 시):
+  - `CFBundleShortVersionString` = 태그에서 `v` 제거 (예: `0.1.0`)
+  - `CFBundleVersion` = `git rev-list --count HEAD` (단조 증가하는 정수)
+- **태그 없는 dev 빌드**:
+  - `CFBundleShortVersionString = "0.0.0"`
+  - `CFBundleVersion = "dev-<sha>"` (또는 `dev-local`)
 
-- `MARKETING_VERSION`: 태그에서 `v` 제거 → `CFBundleShortVersionString` 반영
-- `CURRENT_PROJECT_VERSION`: GitHub Actions run number (단조 증가) → 미래 hot-fix 재빌드에도 안전
-- pbxproj의 `MARKETING_VERSION = 1.0`은 로컬 개발용 기본값으로 유지. **단, Step 4에서 `0.1.0`으로 정렬하여 첫 정식 릴리스와 일치시킴**
-- `workflow_dispatch`로 태그 없이 수동 실행 시 `VERSION=main`이 되지만 release upload step이 `if: startsWith(github.ref, 'refs/tags/')`로 차단되므로 안전
+본 업데이트 체크 기능은 이 메커니즘을 그대로 사용하면 됨. **추가 CI 변경, pbxproj 변경, 작업 모두 불필요**.
+
+User script sandboxing은 PortBridge 타깃에서 비활성화됨 (스크립트가 `git`을 호출해야 하므로). 이는 ae6b1aa에서 함께 적용됨.
 
 ## 8. 테스트 전략
 
@@ -427,13 +418,12 @@ private let automaticUpdateCheckEnabledKey = "PortBridge.AutomaticUpdateCheckEna
 - Observation 재-arm 패턴
 - **검증**: `MARKETING_VERSION=0.0.1` 로컬 빌드로 메뉴/배지 표시 확인.
 
-### Step 4 — 배너 알림 + CI + pbxproj 정렬
+### Step 4 — 배너 알림 + 프라이버시 문서
 - `UpdateNotifier.swift` (`UNUserNotificationCenter`)
 - 첫 감지 1회 표시 + `lastNotifiedVersion` 영속화
-- `.github/workflows/release.yml` 수정: `MARKETING_VERSION=$VERSION` 주입
-- pbxproj `MARKETING_VERSION = 1.0` → `0.1.0` 정렬
 - `docs/PRIVACY.md` 추가
-- **검증**: `v0.2.0` 태그 푸시 → CI 빌드 → 다른 기기에서 v0.1.0 실행 시 배너 + 도트 + 메뉴 항목 모두 표시.
+- (CI/pbxproj 변경은 ae6b1aa로 이미 처리됨 — § 7 참조)
+- **검증**: `v0.2.0` 태그 푸시 → CI 빌드 (`inject-version.sh`가 자동으로 `0.2.0` 주입) → 다른 기기에서 v0.1.0 실행 시 배너 + 도트 + 메뉴 항목 모두 표시.
 
 ## 11. 확장 여지 (향후 단계, 비목표)
 
