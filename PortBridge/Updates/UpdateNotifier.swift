@@ -1,6 +1,6 @@
 import Foundation
-import UserNotifications
 import os.log
+import UserNotifications
 
 @MainActor
 protocol UpdateNotifying: Sendable {
