@@ -164,6 +164,12 @@ struct ServerSectionView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("\(primaryLabel) \(secondaryLabel)")
+            .accessibilityValue(isOffline ? "오프라인" : (section.isExpanded ? "펼침" : "접힘"))
+            .accessibilityHint(isOffline
+                ? "이중 탭하여 재스캔"
+                : "이중 탭하여 \(section.isExpanded ? "접기" : "펼치기")")
 
             if case .scanning = section.scanState {
                 ProgressView().controlSize(.small)
