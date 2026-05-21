@@ -5,13 +5,33 @@ struct ServerListView: View {
     @Bindable var vm: AppViewModel
     @State private var showAddSheet = false
     @State private var editingServer: Server? = nil
+    @State private var pendingDelete: Server? = nil
+    @FocusState private var isSearchFocused: Bool
+
+    private var isDeletePresented: Binding<Bool> {
+        Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        )
+    }
+
+    private func activeForwardingCount(for serverId: UUID) -> Int {
+        vm.activeForwardings.filter { $0.serverId == serverId }.count
+    }
 
     var body: some View {
         Group {
             if vm.serverSections.isEmpty && vm.activeForwardings.isEmpty {
                 emptyStateView
+            } else if isSearching && !hasSearchMatches {
+                noSearchResultsView
             } else {
                 serverList
+            }
+        }
+        .safeAreaInset(edge: .top) {
+            if !vm.serverSections.isEmpty {
+                allServersHeader
             }
         }
         .safeAreaInset(edge: .top) {
@@ -23,6 +43,27 @@ struct ServerListView: View {
         }
         .sheet(item: $editingServer) { server in
             AddServerSheet(editing: server) { updated in vm.updateServer(updated) }
+        }
+        .confirmationDialog(
+            "서버 삭제",
+            isPresented: isDeletePresented,
+            presenting: pendingDelete
+        ) { server in
+            Button("삭제", role: .destructive) {
+                vm.deleteServer(server)
+                pendingDelete = nil
+            }
+            Button("취소", role: .cancel) {
+                pendingDelete = nil
+            }
+        } message: { server in
+            let label = server.name ?? server.host
+            let active = activeForwardingCount(for: server.id)
+            if active > 0 {
+                Text("'\(label)'을(를) 삭제하면 활성 포워딩 \(active)개가 종료됩니다. 이 동작은 되돌릴 수 없습니다.")
+            } else {
+                Text("'\(label)'을(를) 삭제하시겠습니까? 이 동작은 되돌릴 수 없습니다.")
+            }
         }
     }
 
@@ -46,6 +87,26 @@ struct ServerListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var noSearchResultsView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("'\(vm.searchText)'에 일치하는 결과가 없습니다")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            Button("검색어 지우기") {
+                vm.searchText = ""
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var visibleActiveForwardings: [Forwarding] {
         vm.activeForwardings.filter { fw in
             guard let section = vm.serverSections.first(where: { $0.server.id == fw.serverId }),
@@ -53,6 +114,17 @@ struct ServerListView: View {
                 return vm.searchText.isEmpty
             }
             return vm.matches(port)
+        }
+    }
+
+    private var isSearching: Bool {
+        !vm.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var hasSearchMatches: Bool {
+        if !visibleActiveForwardings.isEmpty { return true }
+        return vm.serverSections.contains { section in
+            section.ports.contains(where: { vm.matches($0) })
         }
     }
 
@@ -65,11 +137,11 @@ struct ServerListView: View {
                         activeRow(for: fw)
                     }
                 } header: {
-                    Text("포워딩 중")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.tint)
-                        .padding(.vertical, 2)
+                    ActiveSectionHeader(
+                        count: visibleActiveForwardings.count,
+                        onStopAll: { vm.stopAllActiveForwardings() }
+                    )
+                    .padding(.vertical, 2)
                 }
             }
 
@@ -84,17 +156,9 @@ struct ServerListView: View {
                             Task { await vm.toggleForwarding(serverId: section.server.id, for: port) }
                         },
                         onEdit: { editingServer = section.server },
-                        onDelete: { vm.deleteServer(section.server) }
+                        onDelete: { pendingDelete = section.server }
                     )
                 }
-            } header: {
-                AllServersSectionHeader(
-                    count: vm.serverSections.count,
-                    allExpanded: vm.allExpanded,
-                    onToggleAll: {
-                        vm.toggleAllExpanded()
-                    }
-                )
             }
         }
         .listStyle(.plain)
@@ -113,6 +177,19 @@ struct ServerListView: View {
         }
     }
 
+    private var allServersHeader: some View {
+        AllServersSectionHeader(
+            count: vm.serverSections.count,
+            allExpanded: vm.allExpanded,
+            onToggleAll: {
+                vm.toggleAllExpanded()
+            }
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
     private var serverListHeader: some View {
         HStack(spacing: 8) {
             if vm.serverSections.isEmpty {
@@ -124,8 +201,23 @@ struct ServerListView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 TextField("포트 번호나 프로세스 이름으로 찾기", text: $vm.searchText)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .focused($isSearchFocused)
                     .controlSize(.small)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color(nsColor: .textBackgroundColor))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(
+                                isSearchFocused ? Color.PB.inputBorderFocused : Color.PB.inputBorder,
+                                lineWidth: isSearchFocused ? 1.5 : 1
+                            )
+                    )
+                    .animation(.easeInOut(duration: 0.15), value: isSearchFocused)
                 if !vm.searchText.isEmpty {
                     Button {
                         vm.searchText = ""
@@ -149,7 +241,9 @@ struct ServerListView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("전체 서버 포트 새로고침")
+            .help("전체 서버 포트 새로고침 (⌘R)")
+            .accessibilityLabel("전체 서버 포트 새로고침")
+            .keyboardShortcut("r", modifiers: .command)
 
             Button {
                 showAddSheet = true
@@ -159,7 +253,9 @@ struct ServerListView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("서버 추가")
+            .help("서버 추가 (⌘N)")
+            .accessibilityLabel("서버 추가")
+            .keyboardShortcut("n", modifiers: .command)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

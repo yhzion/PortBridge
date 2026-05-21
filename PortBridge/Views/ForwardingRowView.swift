@@ -23,14 +23,6 @@ struct ForwardingRowView: View {
         }
     }
 
-    private var addressMeaning: String {
-        switch port.address {
-        case "0.0.0.0", "::": return "모든 인터페이스"
-        case "127.0.0.1", "::1": return "로컬 전용"
-        default: return port.address
-        }
-    }
-
     private var stateLabel: String? {
         let server = forwarding?.serverDisplayName
         let serverPrefix = server.map { "\($0) · " } ?? ""
@@ -56,10 +48,12 @@ struct ForwardingRowView: View {
             statusIndicator
                 .frame(width: 18, height: 18)
 
-            VStack(alignment: .leading, spacing: 1) {
-                primaryLine
-                secondaryLine
-            }
+            Text(rowLine)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(isErrorState ? .red : .primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
 
             Spacer(minLength: 4)
 
@@ -81,48 +75,14 @@ struct ForwardingRowView: View {
             onToggle()
         }
         .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(rowLine)
+        .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
+        .accessibilityAddTraits(.isButton)
     }
 
-    @ViewBuilder
-    private var primaryLine: some View {
-        if let proc = port.processName, !proc.isEmpty {
-            Text(verbatim: proc)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else {
-            Text("열린 포트")
-                .font(.headline)
-                .fontWeight(.regular)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-    }
-
-    @ViewBuilder
-    private var secondaryLine: some View {
-        if let label = stateLabel {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(isErrorState ? .red : .secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else {
-            HStack(spacing: 6) {
-                Text(verbatim: ":\(port.port)")
-                    .font(.system(.caption, design: .monospaced).weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text("·")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                Text(addressMeaning)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
+    private var rowLine: String {
+        stateLabel ?? port.displayLine
     }
 
     @ViewBuilder
@@ -159,11 +119,11 @@ private struct OpenInBrowserButton: View {
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.accentColor.opacity(backgroundOpacity))
+                    .fill(backgroundFill)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(Color.accentColor.opacity(isHovering ? 0.35 : 0.18), lineWidth: 1)
+                    .strokeBorder(isHovering ? Color.PB.accentStrokeHover : Color.PB.accentStrokeSubtle, lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
@@ -182,9 +142,49 @@ private struct OpenInBrowserButton: View {
         .help("기본 브라우저로 http://localhost:\(localPort) 열기")
     }
 
-    private var backgroundOpacity: Double {
-        if isPressed { return 0.25 }
-        if isHovering { return 0.15 }
-        return 0.06
+    private var backgroundFill: Color {
+        if isPressed { return Color.PB.accentBgPressed }
+        if isHovering { return Color.PB.accentBgHover }
+        return Color.PB.accentBgIdle
     }
+}
+
+#Preview("Idle · 비활성 포트") {
+    ForwardingRowView(
+        port: RemotePort(port: 8080, address: "0.0.0.0", processName: "nginx"),
+        forwarding: nil,
+        onToggle: {}
+    )
+    .padding()
+    .frame(width: 420)
+}
+
+#Preview("Starting") {
+    ForwardingRowView(
+        port: RemotePort(port: 5432, address: "127.0.0.1", processName: "postgres"),
+        forwarding: Forwarding(serverId: UUID(), serverDisplayName: "db-01", remotePort: 5432, localPort: 5432, state: .starting),
+        onToggle: {}
+    )
+    .padding()
+    .frame(width: 420)
+}
+
+#Preview("Active") {
+    ForwardingRowView(
+        port: RemotePort(port: 6443, address: "0.0.0.0", processName: nil),
+        forwarding: Forwarding(serverId: UUID(), serverDisplayName: "k8s-master", remotePort: 6443, localPort: 6443, state: .active),
+        onToggle: {}
+    )
+    .padding()
+    .frame(width: 420)
+}
+
+#Preview("Error") {
+    ForwardingRowView(
+        port: RemotePort(port: 3389, address: "0.0.0.0", processName: "rdp"),
+        forwarding: Forwarding(serverId: UUID(), serverDisplayName: "win-vm", remotePort: 3389, localPort: 3389, state: .error("connection refused")),
+        onToggle: {}
+    )
+    .padding()
+    .frame(width: 420)
 }

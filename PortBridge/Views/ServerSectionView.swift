@@ -77,21 +77,25 @@ struct ServerSectionView: View {
         return section.server.port == 22 ? target : "\(target):\(section.server.port)"
     }
 
+    private func toggleExpandedAnimated() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            section.toggleExpanded()
+        }
+    }
+
     private var sectionHeader: some View {
         HStack(spacing: 8) {
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    section.toggleExpanded()
-                }
-            } label: {
+            Button(action: toggleExpandedAnimated) {
                 Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 12)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(section.isExpanded ? "접기" : "펼치기")
 
             ServerMonogram(server: section.server)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(primaryLabel)
@@ -114,8 +118,9 @@ struct ServerSectionView: View {
                     .foregroundStyle(.tint)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
-                    .background(Color.accentColor.opacity(0.14), in: Capsule())
+                    .background(Color.PB.accentBadgeBg, in: Capsule())
                     .help("이 서버에서 포워딩 중인 포트 수")
+                    .accessibilityLabel("포워딩 중인 포트 \(activeCount)개")
             }
 
             if case .scanning = section.scanState {
@@ -126,6 +131,7 @@ struct ServerSectionView: View {
                 }
                 .buttonStyle(.plain)
                 .help("\(primaryLabel) 포트 재스캔")
+                .accessibilityLabel("\(primaryLabel) 포트 재스캔")
             }
 
             Menu {
@@ -138,8 +144,11 @@ struct ServerSectionView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .frame(width: 20)
+            .accessibilityLabel("\(primaryLabel) 더보기")
         }
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: toggleExpandedAnimated)
     }
 }
 
@@ -152,20 +161,29 @@ private struct ServerMonogram: View {
         return String(first).uppercased()
     }
 
-    /// Deterministic hue from host bytes — Swift's String.hashValue is randomized
-    /// per process, so we use a stable UTF-8 byte sum instead.
+    /// Deterministic hue from host via FNV-1a 32-bit. Swift's `String.hashValue` is
+    /// randomized per process, and a plain byte sum collapses anagrams like
+    /// `prod-01`/`prod-10` to the same color.
     private var hue: Double {
-        let sum = server.host.utf8.reduce(0) { $0 + Int($1) }
-        return Double(sum % 360) / 360.0
+        var hash: UInt32 = 0x811c9dc5
+        for byte in server.host.utf8 {
+            hash ^= UInt32(byte)
+            hash &*= 0x01000193
+        }
+        return Double(hash % 360) / 360.0
     }
 
     var body: some View {
-        let tint = Color(hue: hue, saturation: 0.55, brightness: 0.85)
+        let tint = Color(
+            hue: hue,
+            saturation: Color.PB.Monogram.saturation,
+            brightness: Color.PB.Monogram.brightness
+        )
         ZStack {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(tint.opacity(0.18))
+                .fill(tint.opacity(Color.PB.Monogram.fillOpacity))
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(tint.opacity(0.40), lineWidth: 0.5)
+                .strokeBorder(tint.opacity(Color.PB.Monogram.strokeOpacity), lineWidth: 0.5)
             Text(initial)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(tint)

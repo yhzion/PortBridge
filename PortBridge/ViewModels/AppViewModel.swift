@@ -13,8 +13,27 @@ final class AppViewModel {
     var forwardings: [Forwarding] = []
     private(set) var activatedAt: [UUID: Date] = [:]
     var pendingPortConflict: PortConflict?
-    var lastError: String?
+    var errors: [ErrorToast] = []
     var searchText: String = ""
+
+    private let errorDisplayDuration: TimeInterval = 5
+    private let maxErrorsShown: Int = 3
+
+    func showError(_ message: String) {
+        let toast = ErrorToast(message: message)
+        errors.append(toast)
+        if errors.count > maxErrorsShown {
+            errors.removeFirst(errors.count - maxErrorsShown)
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((self?.errorDisplayDuration ?? 5) * 1_000_000_000))
+            self?.errors.removeAll { $0.id == toast.id }
+        }
+    }
+
+    func dismissError(_ id: UUID) {
+        errors.removeAll { $0.id == id }
+    }
 
     func matches(_ port: RemotePort) -> Bool {
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
@@ -122,6 +141,18 @@ final class AppViewModel {
         forwardings.removeAll { $0.serverId == serverId }
     }
 
+    /// UI의 "모두 끄기" 액션 — 사용자에게 표시되는 모든 활성/시작중/에러 forwarding을 중단.
+    /// `shutdownAll()`은 앱 종료 시점용이라 의도 분리를 위해 별도 메소드로 둡니다.
+    func stopAllActiveForwardings() {
+        let ids = Set(activeForwardings.map(\.id))
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            tunnels.stop(id)
+            activatedAt[id] = nil
+        }
+        forwardings.removeAll { ids.contains($0.id) }
+    }
+
     func shutdownAll() {
         tunnels.shutdownAll()
         forwardings.removeAll()
@@ -142,7 +173,6 @@ final class AppViewModel {
     }
 
     private func startForwarding(server: Server, remotePort: Int, localPort: Int) async {
-        lastError = nil
         let placeholderID = UUID()
         let placeholder = Forwarding(
             id: placeholderID,
@@ -180,13 +210,18 @@ final class AppViewModel {
         } catch let error as PortBridgeError {
             forwardings.removeAll { $0.id == placeholderID }
             activatedAt[placeholderID] = nil
-            lastError = error.errorDescription
+            showError(error.errorDescription ?? error.localizedDescription)
         } catch {
             forwardings.removeAll { $0.id == placeholderID }
             activatedAt[placeholderID] = nil
-            lastError = error.localizedDescription
+            showError(error.localizedDescription)
         }
     }
+}
+
+struct ErrorToast: Identifiable, Equatable {
+    let id = UUID()
+    let message: String
 }
 
 struct PortConflict: Identifiable, Equatable {

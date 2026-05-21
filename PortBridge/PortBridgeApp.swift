@@ -10,6 +10,10 @@ struct PortBridgeApp: App {
             ContentView()
                 .environment(delegate.viewModel)
         }
+        .commands {
+            // ⌘N은 ServerListView에서 "서버 추가"에 사용하므로 기본 "새 창" 바인딩 해제.
+            CommandGroup(replacing: .newItem) {}
+        }
     }
 }
 

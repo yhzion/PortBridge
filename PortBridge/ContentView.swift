@@ -9,10 +9,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             Divider()
             ServerListView(vm: vm)
-
-            if let err = vm.lastError {
-                errorBanner(err)
-            }
+            errorStack
         }
         .frame(minWidth: 480, idealWidth: 540, minHeight: 80, idealHeight: vm.serverSections.isEmpty ? 200 : 480)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -27,20 +24,51 @@ struct ContentView: View {
         }
     }
 
-    private func errorBanner(_ msg: String) -> some View {
+    @ViewBuilder
+    private var errorStack: some View {
+        if !vm.errors.isEmpty {
+            VStack(spacing: 4) {
+                ForEach(vm.errors) { toast in
+                    errorToast(toast)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 4)
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: vm.errors.map(\.id))
+        }
+    }
+
+    private func errorToast(_ toast: ErrorToast) -> some View {
         HStack(alignment: .top, spacing: 6) {
-            Text(msg)
+            Image(systemName: "exclamationmark.triangle.fill")
+                .imageScale(.small)
+                .foregroundStyle(.red)
+                .accessibilityHidden(true)
+            Text(toast.message)
                 .font(.caption)
                 .foregroundStyle(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button { vm.lastError = nil } label: {
+                .accessibilityLabel("오류: \(toast.message)")
+            Button {
+                vm.dismissError(toast.id)
+            } label: {
                 Image(systemName: "xmark").imageScale(.small).foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
             .help("에러 메시지 닫기")
+            .accessibilityLabel("에러 메시지 닫기")
         }
-        .padding(.horizontal)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.red.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.red.opacity(0.25), lineWidth: 1)
+        )
     }
 }
 

@@ -11,8 +11,20 @@ struct AddServerSheet: View {
     @State private var host: String = ""
     @State private var portText: String = "22"
 
-    private var isValid: Bool { !user.trimmingCharacters(in: .whitespaces).isEmpty && !host.trimmingCharacters(in: .whitespaces).isEmpty }
-    private var portValue: Int { Int(portText) ?? 22 }
+    private var isValid: Bool {
+        !user.trimmingCharacters(in: .whitespaces).isEmpty
+            && !host.trimmingCharacters(in: .whitespaces).isEmpty
+            && parsedPort != nil
+    }
+
+    /// 유효 SSH 포트: 1–65535. 0은 "임의 할당" 의미라 SSH 대상으로 부적합.
+    private var parsedPort: Int? {
+        guard let p = Int(portText.trimmingCharacters(in: .whitespaces)),
+              (1...65535).contains(p) else { return nil }
+        return p
+    }
+
+    private var portValue: Int { parsedPort ?? 22 }
 
     init(editing: Server? = nil, onSave: @escaping (Server) -> Void) {
         self.editing = editing
@@ -37,6 +49,11 @@ struct AddServerSheet: View {
                 TextField(text: $host, prompt: Text("hostname 또는 IP")) { Text("호스트") }
                     .disableAutocorrection(true)
                 TextField(text: $portText, prompt: Text("22")) { Text("포트") }
+                if !portText.isEmpty && parsedPort == nil {
+                    Text("1–65535 범위의 숫자여야 합니다")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
             .formStyle(.grouped)
 
@@ -62,4 +79,15 @@ struct AddServerSheet: View {
         .padding()
         .frame(width: 380)
     }
+}
+
+#Preview("새 서버") {
+    AddServerSheet(onSave: { _ in })
+}
+
+#Preview("서버 편집") {
+    AddServerSheet(
+        editing: Server(id: UUID(), name: "RTX 5090 Ubuntu", user: "yhzion", host: "100.74.124.72", port: 22),
+        onSave: { _ in }
+    )
 }
