@@ -198,6 +198,35 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         dockItem.state = viewModel.preferences.showInDock ? .on : .off
         menu.addItem(dockItem)
 
+        let autoCheckItem = NSMenuItem(
+            title: "Check for Updates Automatically",
+            action: #selector(toggleAutomaticUpdateCheck),
+            keyEquivalent: ""
+        )
+        autoCheckItem.target = self
+        autoCheckItem.state = viewModel.preferences.automaticUpdateCheckEnabled ? .on : .off
+        menu.addItem(autoCheckItem)
+
+        let checkNowItem: NSMenuItem
+        if case .failed = viewModel.updates.phase {
+            checkNowItem = NSMenuItem(
+                title: "Check failed — try again",
+                action: #selector(checkForUpdatesNow),
+                keyEquivalent: ""
+            )
+        } else if case .checking = viewModel.updates.phase {
+            checkNowItem = NSMenuItem(title: "Checking…", action: nil, keyEquivalent: "")
+            checkNowItem.isEnabled = false
+        } else {
+            checkNowItem = NSMenuItem(
+                title: "Check for Updates Now…",
+                action: #selector(checkForUpdatesNow),
+                keyEquivalent: ""
+            )
+        }
+        checkNowItem.target = self
+        menu.addItem(checkNowItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -274,6 +303,16 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func skipCurrentRelease() {
         viewModel.updates.skipCurrent()
+    }
+
+    @objc private func toggleAutomaticUpdateCheck() {
+        viewModel.preferences.automaticUpdateCheckEnabled.toggle()
+    }
+
+    @objc private func checkForUpdatesNow() {
+        Task { @MainActor in
+            await viewModel.updates.checkNow()
+        }
     }
 
     // MARK: - Icon observation
