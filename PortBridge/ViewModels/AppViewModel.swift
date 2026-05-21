@@ -97,7 +97,8 @@ final class AppViewModel {
             ),
             defaults: .standard,
             preferences: resolvedPrefs,
-            currentVersion: Bundle.main.currentVersion
+            currentVersion: Bundle.main.currentVersion,
+            notifier: UpdateNotifier()
         )
         manager.delegate = self
         rebuildSections()

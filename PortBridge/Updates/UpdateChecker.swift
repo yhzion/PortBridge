@@ -22,6 +22,7 @@ final class UpdateChecker {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private let currentVersion: SemanticVersion?
+    @ObservationIgnored private let notifier: UpdateNotifying?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let log = Logger(subsystem: "PortBridge", category: "UpdateChecker")
 
@@ -40,11 +41,13 @@ final class UpdateChecker {
          defaults: UserDefaults,
          preferences: AppPreferences,
          currentVersion: SemanticVersion?,
+         notifier: UpdateNotifying? = nil,
          now: @escaping () -> Date = Date.init) {
         self.fetcher = fetcher
         self.defaults = defaults
         self.preferences = preferences
         self.currentVersion = currentVersion
+        self.notifier = notifier
         self.now = now
         self.lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
         self.skippedVersion = defaults.string(forKey: Keys.skippedVersion)
@@ -75,6 +78,13 @@ final class UpdateChecker {
             let isNewer = remote > current
             let isSkipped = (skippedVersion == remote)
             if isNewer && !isSkipped {
+                if lastNotifiedVersion != remote {
+                    lastNotifiedVersion = remote
+                    defaults.set(remote.string, forKey: Keys.lastNotifiedVersion)
+                    if let notifier {
+                        await notifier.notify(release: info)
+                    }
+                }
                 phase = .available(info)
             } else {
                 phase = .upToDate(checkedAt: timestamp)

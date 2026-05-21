@@ -179,4 +179,46 @@ final class UpdateCheckerTests: XCTestCase {
         await checker.checkNow()
         XCTAssertEqual(fetcher.callCount, 1)
     }
+
+    func test_notifiesOnFirstDetection() async {
+        let notifier = MockUpdateNotifier()
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            notifier: notifier
+        )
+        await checker.checkNow()
+        XCTAssertEqual(notifier.notifyCalls.count, 1)
+        XCTAssertEqual(notifier.notifyCalls.first?.tagName, "v0.2.0")
+        XCTAssertEqual(checker.lastNotifiedVersion, SemanticVersion(string: "0.2.0"))
+    }
+
+    func test_doesNotNotifyTwiceForSameVersion() async {
+        let notifier = MockUpdateNotifier()
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            notifier: notifier
+        )
+        await checker.checkNow()
+        await checker.checkNow()
+        XCTAssertEqual(notifier.notifyCalls.count, 1)
+    }
+
+    func test_notifiesAgainForHigherVersion() async {
+        let notifier = MockUpdateNotifier()
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            notifier: notifier
+        )
+        await checker.checkNow()
+
+        fetcher.result = .success(release("v0.3.0"))
+        await checker.checkNow()
+        XCTAssertEqual(notifier.notifyCalls.count, 2)
+    }
 }
