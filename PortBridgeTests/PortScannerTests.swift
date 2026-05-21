@@ -238,4 +238,26 @@ final class PortScannerTests: XCTestCase {
         let ports = try await scanner.scan(server: makeServer())
         XCTAssertEqual(ports.count, 0)
     }
+
+    // macOS BSD 소켓은 도달 불가 호스트에 대해 "Operation timed out"을 출력함
+    // (Linux는 "Connection timed out"). 두 표기 모두 .serverUnreachable로 분류되어야 함.
+    func test_operationTimedOut_throwsServerUnreachable() async throws {
+        let mock = MockCommandRunner()
+        await mock.setResponses([
+            CommandResult(
+                exitCode: 255,
+                stdout: "",
+                stderr: "ssh: connect to host 10.99.99.99 port 22: Operation timed out\n"
+            )
+        ])
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            guard case .serverUnreachable = error else {
+                XCTFail("expected .serverUnreachable, got \(error)"); return
+            }
+        }
+    }
 }

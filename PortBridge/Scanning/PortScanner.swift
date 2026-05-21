@@ -32,8 +32,9 @@ nonisolated struct PortScanner {
             }
 
             // 2. 도달 불가 패턴 통합 (timeout 포함)
+            // macOS BSD 소켓은 "Operation timed out", Linux는 "Connection timed out" 사용 — 둘 다 매칭.
             let unreachablePatterns = [
-                "connection timed out", "connect timeout",
+                "connection timed out", "connect timeout", "operation timed out",
                 "no route to host",
                 "connection refused",
                 "could not resolve hostname", "name or service not known",

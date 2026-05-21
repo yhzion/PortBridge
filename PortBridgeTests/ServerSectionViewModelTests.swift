@@ -116,6 +116,26 @@ final class ServerSectionViewModelTests: XCTestCase {
         XCTAssertEqual(vm.scanState, .toolMissing)
     }
 
+    // macOS ssh는 도달 불가 호스트에 대해 "Operation timed out"을 출력함
+    // (Linux는 "Connection timed out"). 두 표기 모두 .offline(false)로 분류되어야 함.
+    @MainActor
+    func test_scan_operationTimedOut_setsOffline() async {
+        let mock = MockCommandRunner()
+        await mock.setResponses([
+            CommandResult(
+                exitCode: 255,
+                stdout: "",
+                stderr: "ssh: connect to host 10.0.0.1 port 22: Operation timed out\n"
+            )
+        ])
+        let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
+        await vm.scan()
+        guard case .offline(let isRetrying) = vm.scanState else {
+            XCTFail("expected .offline, got \(vm.scanState)"); return
+        }
+        XCTAssertFalse(isRetrying)
+    }
+
     @MainActor
     func test_scan_fromOffline_silentlyRetries() async {
         // 첫 스캔: 오프라인
