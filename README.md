@@ -21,6 +21,8 @@ PortBridge scans listening ports on hosts in your `~/.ssh/config` and forwards t
 - 🍔 **Menu bar resident** — Dock icon optional, right-click toggles all favorites
 - 🔁 **Resolve port conflicts** inline by picking a fallback local port
 - 🌐 **Open in browser** with one click
+- ✏️ **Edit servers safely** — auto-reconnects active forwards when identity changes, blocks duplicate `(user, host, port)` entries
+- 🔔 **Update notifications** — checks GitHub Releases, shows a menu bar badge and first-detection banner (skip version or disable in menu)
 
 <p align="center">
   <img src="docs/assets/menubar-popover.png" alt="PortBridge menu bar" width="360">
@@ -70,6 +72,10 @@ Or in Finder, right-click `PortBridge.app` → **Open** → **Open**.
 ```
 
 Requires Xcode. Builds Release, ad-hoc signs, and installs to `/Applications/PortBridge.app`.
+
+## Privacy
+
+PortBridge contacts `api.github.com` only to check for new releases. See [docs/PRIVACY.md](docs/PRIVACY.md) for what is and isn't sent.
 
 ## License
 
