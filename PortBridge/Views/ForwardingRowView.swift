@@ -24,14 +24,25 @@ struct ForwardingRowView: View {
         }
     }
 
-    private var stateLabel: String? {
+    private var isActive: Bool {
+        forwarding?.state == .active
+    }
+
+    private var showPortColumn: Bool {
+        switch forwarding?.state {
+        case .active, .error, .idle, .none: return true
+        default: return false
+        }
+    }
+
+    private var stateSubtitle: String? {
         let serverPrefix = serverDisplayName.map { "\($0) · " } ?? ""
         switch forwarding?.state {
         case .starting:
             return "\(serverPrefix)포워딩 연결 중…"
         case .active:
             if let local = forwarding?.localPort {
-                return "\(serverPrefix):\(local) → 리모트 :\(port.port) 포워딩 중"
+                return "→ :\(local) 포워딩 중"
             }
             return "\(serverPrefix)포워딩 중"
         case .error:
@@ -48,16 +59,32 @@ struct ForwardingRowView: View {
             statusIndicator
                 .frame(width: 18, height: 18)
 
-            Text(rowLine)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundStyle(isErrorState ? .red : .primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            if showPortColumn {
+                Text(":\(port.port)")
+                    .font(.system(.body, design: .monospaced).bold())
+                    .monospacedDigit()
+                    .foregroundStyle(isErrorState ? .red : isActive ? .green : .primary)
+                    .frame(minWidth: 48, alignment: .trailing)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(rightPrimary)
+                    .font(.caption)
+                    .foregroundStyle(rightPrimaryColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                if let secondary = rightSecondary {
+                    Text(secondary)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
 
             Spacer(minLength: 4)
 
-            if forwarding?.state == .active, let local = forwarding?.localPort, isRowHovering {
+            if isActive, let local = forwarding?.localPort, isRowHovering {
                 OpenInBrowserButton(localPort: local)
             }
 
@@ -76,13 +103,33 @@ struct ForwardingRowView: View {
         }
         .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(rowLine)
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
         .accessibilityAddTraits(.isButton)
     }
 
-    private var rowLine: String {
-        stateLabel ?? port.displayLine
+    private var rightPrimary: String {
+        if let stateSubtitle { return stateSubtitle }
+        return port.scopeLabel
+    }
+
+    private var rightPrimaryColor: Color {
+        if isErrorState { return .red }
+        if isActive { return .green }
+        return .secondary
+    }
+
+    private var rightSecondary: String? {
+        guard stateSubtitle == nil, let name = port.processName, !name.isEmpty else { return nil }
+        return name
+    }
+
+    private var accessibilityLabel: String {
+        if let stateSubtitle {
+            let server = serverDisplayName.map { "\($0) · " } ?? ""
+            return ":\(port.port) \(server)\(stateSubtitle)"
+        }
+        return port.displayLine
     }
 
     @ViewBuilder

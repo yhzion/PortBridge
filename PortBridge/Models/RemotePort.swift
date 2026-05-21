@@ -13,7 +13,7 @@ nonisolated struct RemotePort: Identifiable, Hashable {
         return "\(base) · \(processName)"
     }
 
-    private var scopeLabel: String {
+    var scopeLabel: String {
         switch address {
         case "0.0.0.0", "::": return "모든 인터페이스"
         case "127.0.0.1", "::1": return "로컬 전용"
