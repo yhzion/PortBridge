@@ -327,9 +327,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.refreshIcon()
-                self.updateBadge(visible: self.viewModel.updates.availableUpdate != nil)
-                self.observeIconState()
+                refreshIcon()
+                updateBadge(visible: viewModel.updates.availableUpdate != nil)
+                observeIconState()
             }
         }
     }

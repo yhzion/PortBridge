@@ -17,10 +17,12 @@ struct GitHubReleaseFetcher: ReleaseFetcher {
     let session: URLSession
     let currentAppVersion: String
 
-    init(owner: String,
-         repo: String,
-         currentAppVersion: String,
-         session: URLSession = .shared) {
+    init(
+        owner: String,
+        repo: String,
+        currentAppVersion: String,
+        session: URLSession = .shared
+    ) {
         self.owner = owner
         self.repo = repo
         self.currentAppVersion = currentAppVersion
@@ -45,7 +47,7 @@ struct GitHubReleaseFetcher: ReleaseFetcher {
         guard let http = response as? HTTPURLResponse else {
             throw UpdateCheckError.invalidResponse
         }
-        guard (200..<300).contains(http.statusCode) else {
+        guard (200 ..< 300).contains(http.statusCode) else {
             throw UpdateCheckError.httpStatus(http.statusCode)
         }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-struct SemanticVersion: Comparable, Sendable, Hashable {
+struct SemanticVersion: Comparable, Hashable {
     let major: Int
     let minor: Int
     let patch: Int
@@ -29,7 +29,9 @@ struct SemanticVersion: Comparable, Sendable, Hashable {
         self.init(major: major, minor: minor, patch: patch)
     }
 
-    var string: String { "\(major).\(minor).\(patch)" }
+    var string: String {
+        "\(major).\(minor).\(patch)"
+    }
 
     static func < (lhs: Self, rhs: Self) -> Bool {
         (lhs.major, lhs.minor, lhs.patch) < (rhs.major, rhs.minor, rhs.patch)

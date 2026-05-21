@@ -37,22 +37,24 @@ final class UpdateChecker {
         return nil
     }
 
-    init(fetcher: ReleaseFetcher,
-         defaults: UserDefaults,
-         preferences: AppPreferences,
-         currentVersion: SemanticVersion?,
-         notifier: UpdateNotifying? = nil,
-         now: @escaping () -> Date = Date.init) {
+    init(
+        fetcher: ReleaseFetcher,
+        defaults: UserDefaults,
+        preferences: AppPreferences,
+        currentVersion: SemanticVersion?,
+        notifier: UpdateNotifying? = nil,
+        now: @escaping () -> Date = Date.init
+    ) {
         self.fetcher = fetcher
         self.defaults = defaults
         self.preferences = preferences
         self.currentVersion = currentVersion
         self.notifier = notifier
         self.now = now
-        self.lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
-        self.skippedVersion = defaults.string(forKey: Keys.skippedVersion)
+        lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
+        skippedVersion = defaults.string(forKey: Keys.skippedVersion)
             .flatMap(SemanticVersion.init(string:))
-        self.lastNotifiedVersion = defaults.string(forKey: Keys.lastNotifiedVersion)
+        lastNotifiedVersion = defaults.string(forKey: Keys.lastNotifiedVersion)
             .flatMap(SemanticVersion.init(string:))
     }
 
