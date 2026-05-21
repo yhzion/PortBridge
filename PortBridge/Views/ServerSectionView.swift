@@ -25,8 +25,22 @@ struct ServerSectionView: View {
 
     var body: some View {
         sectionHeader
-        if section.isExpanded {
+        if section.isExpanded && !isOffline {
             sectionContent
+        }
+    }
+
+    private var isOffline: Bool {
+        if case .offline = section.scanState { return true }
+        return false
+    }
+
+    private var statusDot: ServerStatusDot {
+        switch section.scanState {
+        case .offline(let isRetrying): return .offline(pulse: isRetrying)
+        case .toolMissing, .authFailed: return .warning
+        case .loaded: return .online
+        default: return .none
         }
     }
 
@@ -91,23 +105,29 @@ struct ServerSectionView: View {
 
     private var sectionHeader: some View {
         HStack(spacing: 8) {
-            Button(action: toggleExpandedAnimated) {
-                Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12)
+            if !isOffline {
+                Button(action: toggleExpandedAnimated) {
+                    Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                        .transaction { $0.animation = nil }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(section.isExpanded ? "접기" : "펼치기")
+            } else {
+                // 12px 자리 비움 — 다른 행과 가로 정렬 유지
+                Color.clear.frame(width: 12, height: 12)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(section.isExpanded ? "접기" : "펼치기")
 
-            ServerMonogram(server: section.server)
+            ServerMonogram(server: section.server, status: statusDot, dimmed: isOffline)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(primaryLabel)
                     .font(.headline)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isOffline ? .secondary : .primary)
                     .lineLimit(1)
                 Text(secondaryLabel)
                     .font(.system(.caption, design: .monospaced))
@@ -117,7 +137,7 @@ struct ServerSectionView: View {
 
             Spacer(minLength: 8)
 
-            if activeCount > 0 {
+            if activeCount > 0 && !isOffline {
                 Text("\(activeCount)")
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .monospacedDigit()
@@ -131,7 +151,7 @@ struct ServerSectionView: View {
 
             if case .scanning = section.scanState {
                 ProgressView().controlSize(.small)
-            } else {
+            } else if !isOffline {
                 Button { Task { await section.scan() } } label: {
                     Image(systemName: "arrow.clockwise").font(.body).foregroundStyle(.secondary)
                 }
@@ -154,7 +174,15 @@ struct ServerSectionView: View {
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .onTapGesture(perform: toggleExpandedAnimated)
+        .onTapGesture { handleRowTap() }
+    }
+
+    private func handleRowTap() {
+        if isOffline {
+            Task { await section.scan() }
+        } else {
+            toggleExpandedAnimated()
+        }
     }
 }
 
