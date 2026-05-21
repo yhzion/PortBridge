@@ -18,6 +18,7 @@ extension Notification.Name {
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let viewModel: AppViewModel
     private var statusItem: NSStatusItem?
+    private var badgeLayer: CALayer?
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -37,6 +38,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
 
         observeIconState()
+        updateBadge(visible: viewModel.updates.availableUpdate != nil)
     }
 
     // MARK: - Click routing
@@ -69,6 +71,44 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
+
+        // Update available (only when a non-skipped newer release exists)
+        if let release = viewModel.updates.availableUpdate {
+            let tag = release.tagName
+            let item = NSMenuItem(
+                title: "Update available — \(tag)",
+                action: #selector(openReleasePage(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = release.htmlURL
+            item.image = NSImage(
+                systemSymbolName: "arrow.down.circle.fill",
+                accessibilityDescription: nil
+            )
+
+            let submenu = NSMenu()
+            let skip = NSMenuItem(
+                title: "Skip This Version",
+                action: #selector(skipCurrentRelease),
+                keyEquivalent: ""
+            )
+            skip.target = self
+            submenu.addItem(skip)
+
+            let notes = NSMenuItem(
+                title: "Show Release Notes…",
+                action: #selector(openReleasePage(_:)),
+                keyEquivalent: ""
+            )
+            notes.target = self
+            notes.representedObject = release.htmlURL
+            submenu.addItem(notes)
+
+            item.submenu = submenu
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
 
         // Favorites
         let favHeader = NSMenuItem(title: "Favorites", action: nil, keyEquivalent: "")
@@ -160,6 +200,35 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         dockItem.state = viewModel.preferences.showInDock ? .on : .off
         menu.addItem(dockItem)
 
+        let autoCheckItem = NSMenuItem(
+            title: "Check for Updates Automatically",
+            action: #selector(toggleAutomaticUpdateCheck),
+            keyEquivalent: ""
+        )
+        autoCheckItem.target = self
+        autoCheckItem.state = viewModel.preferences.automaticUpdateCheckEnabled ? .on : .off
+        menu.addItem(autoCheckItem)
+
+        let checkNowItem: NSMenuItem
+        if case .failed = viewModel.updates.phase {
+            checkNowItem = NSMenuItem(
+                title: "Check failed — try again",
+                action: #selector(checkForUpdatesNow),
+                keyEquivalent: ""
+            )
+        } else if case .checking = viewModel.updates.phase {
+            checkNowItem = NSMenuItem(title: "Checking…", action: nil, keyEquivalent: "")
+            checkNowItem.isEnabled = false
+        } else {
+            checkNowItem = NSMenuItem(
+                title: "Check for Updates Now…",
+                action: #selector(checkForUpdatesNow),
+                keyEquivalent: ""
+            )
+        }
+        checkNowItem.target = self
+        menu.addItem(checkNowItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -229,16 +298,38 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         NSApp.terminate(nil)
     }
 
+    @objc private func openReleasePage(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func skipCurrentRelease() {
+        viewModel.updates.skipCurrent()
+    }
+
+    @objc private func toggleAutomaticUpdateCheck() {
+        viewModel.preferences.automaticUpdateCheckEnabled.toggle()
+    }
+
+    @objc private func checkForUpdatesNow() {
+        Task { @MainActor in
+            await viewModel.updates.checkNow()
+        }
+    }
+
     // MARK: - Icon observation
 
     /// Observation 프레임워크는 한 번 발화하면 종료되므로 onChange 안에서 재구독합니다.
     private func observeIconState() {
         withObservationTracking { [weak self] in
             _ = self?.viewModel.isAnyFavoriteActive
+            _ = self?.viewModel.updates.availableUpdate
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
-                self?.refreshIcon()
-                self?.observeIconState()
+                guard let self else { return }
+                self.refreshIcon()
+                self.updateBadge(visible: self.viewModel.updates.availableUpdate != nil)
+                self.observeIconState()
             }
         }
     }
@@ -246,5 +337,32 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func refreshIcon() {
         let active = viewModel.isAnyFavoriteActive
         statusItem?.button?.image = MenuBarIconRenderer.image(active: active)
+    }
+
+    private func updateBadge(visible: Bool) {
+        guard let button = statusItem?.button else { return }
+        if visible {
+            if badgeLayer == nil {
+                button.wantsLayer = true
+                let layer = CALayer()
+                layer.backgroundColor = NSColor.systemBlue.cgColor
+                layer.cornerRadius = 2
+                button.layer?.addSublayer(layer)
+                badgeLayer = layer
+            }
+            layoutBadge()
+        } else {
+            badgeLayer?.removeFromSuperlayer()
+            badgeLayer = nil
+        }
+    }
+
+    private func layoutBadge() {
+        guard let button = statusItem?.button, let layer = badgeLayer else { return }
+        let size: CGFloat = 4
+        let inset: CGFloat = 1
+        let x = button.bounds.maxX - size - inset
+        let y = button.bounds.maxY - size - inset
+        layer.frame = CGRect(x: x, y: y, width: size, height: size)
     }
 }

@@ -65,6 +65,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await viewModel.startFavoritesIfEnabled()
         }
 
+        // Background update check on launch (no-op if disabled or recently checked).
+        Task { @MainActor in
+            await viewModel.updates.checkIfDue()
+        }
+
         // UI 테스트가 메인 윈도우 표시를 명시 요청한 경우 (LaunchSmokeTests 참조).
         // 액세서리 모드일 수 있어 WindowGroup의 자동 표시가 환경에 따라 불확실하므로,
         // 테스트 결정성을 위해 첫 윈도우를 강제로 전면에 띄운다.

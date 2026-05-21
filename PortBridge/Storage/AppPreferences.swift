@@ -12,6 +12,7 @@ final class AppPreferences {
 
     private let showInDockKey = "PortBridge.ShowInDock"
     private let launchAtLoginKey = "PortBridge.LaunchAtLogin"
+    private let automaticUpdateCheckEnabledKey = "PortBridge.AutomaticUpdateCheckEnabled"
 
     @ObservationIgnored
     private var suppressApply = false
@@ -38,6 +39,13 @@ final class AppPreferences {
         }
     }
 
+    var automaticUpdateCheckEnabled: Bool {
+        didSet {
+            guard !suppressApply, automaticUpdateCheckEnabled != oldValue else { return }
+            defaults.set(automaticUpdateCheckEnabled, forKey: automaticUpdateCheckEnabledKey)
+        }
+    }
+
     init(
         defaults: UserDefaults = .standard,
         applyShowInDock: @escaping (Bool) -> Void,
@@ -57,6 +65,12 @@ final class AppPreferences {
         let systemEnabled = readLaunchAtLogin()
         launchAtLogin = systemEnabled
         defaults.set(systemEnabled, forKey: launchAtLoginKey)
+
+        if defaults.object(forKey: automaticUpdateCheckEnabledKey) == nil {
+            automaticUpdateCheckEnabled = true
+        } else {
+            automaticUpdateCheckEnabled = defaults.bool(forKey: automaticUpdateCheckEnabledKey)
+        }
     }
 }
 
