@@ -13,10 +13,11 @@ extension Color {
 
         /// 입력 필드 비활성 외곽선.
         /// WCAG 2.1 §1.4.11 Non-text Contrast 3:1 이상 보장
-        /// (다크 #6E6E76 vs #1A1A1A ≈ 3.4:1 / 라이트 #AEAEB2 vs #FFFFFF ≈ 3.0:1).
+        /// (다크 #6E6E76 vs #1A1A1A ≈ 3.33:1 / 라이트 #8E8E93 vs #FFFFFF ≈ 3.26:1).
+        /// 라이트는 Apple systemGray와 동일 — textBackgroundColor(흰색) 위에서 3:1 충족.
         static let inputBorder = dynamic(
             dark:  NSColor(srgbRed: 110/255, green: 110/255, blue: 118/255, alpha: 1),
-            light: NSColor(srgbRed: 174/255, green: 174/255, blue: 178/255, alpha: 1)
+            light: NSColor(srgbRed: 142/255, green: 142/255, blue: 147/255, alpha: 1)
         )
 
         /// 입력 필드 포커스 외곽선 — 사용자 강조 색상에 자동 동기화.
