@@ -68,17 +68,17 @@ final class AppViewModel {
     }
 
     init(
-        store: ServerStore = ServerStore(),
-        scanner: PortScanner = PortScanner(runner: ProcessCommandRunner()),
+        store: ServerStore? = nil,
+        scanner: PortScanner? = nil,
         tunnels: TunnelManaging? = nil,
-        favorites: FavoriteStore = FavoriteStore(),
+        favorites: FavoriteStore? = nil,
         preferences: AppPreferences? = nil
     ) {
-        self.store = store
-        self.scanner = scanner
+        self.store = store ?? ServerStore()
+        self.scanner = scanner ?? PortScanner(runner: ProcessCommandRunner())
         let t: TunnelManaging = tunnels ?? TunnelManager()
         self.tunnels = t
-        self.favorites = favorites
+        self.favorites = favorites ?? FavoriteStore()
         self.preferences = preferences ?? AppPreferences.production()
         t.delegate = self
         rebuildSections()

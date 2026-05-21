@@ -174,8 +174,8 @@ final class TunnelManager: TunnelManaging {
         // 첫 호출만 cont.resume()을 통과시키는 one-shot 가드.
         final class OneShot: @unchecked Sendable {
             let lock = NSLock()
-            var fired = false
-            func claim() -> Bool {
+            nonisolated(unsafe) var fired = false
+            nonisolated func claim() -> Bool {
                 lock.lock(); defer { lock.unlock() }
                 if fired { return false }
                 fired = true
