@@ -7,7 +7,7 @@ import Observation
 final class AppViewModel {
     private let store: ServerStore
     private let scanner: PortScanner
-    private let tunnels: TunnelManager
+    private let tunnels: TunnelManaging
 
     private(set) var serverSections: [ServerSectionViewModel] = []
     private(set) var forwardings: [Forwarding] = []
@@ -58,11 +58,11 @@ final class AppViewModel {
     init(
         store: ServerStore = ServerStore(),
         scanner: PortScanner = PortScanner(runner: ProcessCommandRunner()),
-        tunnels: TunnelManager? = nil
+        tunnels: TunnelManaging? = nil
     ) {
         self.store = store
         self.scanner = scanner
-        let t = tunnels ?? TunnelManager()
+        let t: TunnelManaging = tunnels ?? TunnelManager()
         self.tunnels = t
         t.delegate = self
         rebuildSections()

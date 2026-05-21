@@ -3,7 +3,15 @@ import Foundation
 import Darwin
 
 @MainActor
-final class TunnelManager {
+protocol TunnelManaging: AnyObject {
+    var delegate: TunnelManagerDelegate? { get set }
+    func start(server: Server, remotePort: Int, localPort: Int) async throws -> Forwarding
+    func stop(_ id: UUID)
+    func shutdownAll()
+}
+
+@MainActor
+final class TunnelManager: TunnelManaging {
     /// Kills any ssh port-forward processes left over from a previous PortBridge
     /// run (force-quit, crash, Xcode stop, etc). Matches by the exact argv
     /// signature that `start(server:remotePort:localPort:)` emits below.
