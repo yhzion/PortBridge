@@ -16,6 +16,8 @@ final class AppViewModel {
     private(set) var activeForwardings: [Forwarding] = []
     var pendingPortConflict: PortConflict?
     private(set) var errors: [ErrorToast] = []
+    let favorites: FavoriteStore
+    let preferences: AppPreferences
     var searchText: String = "" {
         didSet { normalizedSearchQuery = Self.normalize(searchText) }
     }
@@ -68,12 +70,16 @@ final class AppViewModel {
     init(
         store: ServerStore = ServerStore(),
         scanner: PortScanner = PortScanner(runner: ProcessCommandRunner()),
-        tunnels: TunnelManaging? = nil
+        tunnels: TunnelManaging? = nil,
+        favorites: FavoriteStore = FavoriteStore(),
+        preferences: AppPreferences? = nil
     ) {
         self.store = store
         self.scanner = scanner
         let t: TunnelManaging = tunnels ?? TunnelManager()
         self.tunnels = t
+        self.favorites = favorites
+        self.preferences = preferences ?? AppPreferences.production()
         t.delegate = self
         rebuildSections()
     }
@@ -96,6 +102,16 @@ final class AppViewModel {
     /// View 렌더링 시점에 사용. `Forwarding`이 서버 이름을 복제하지 않고 SSoT(ServerStore)에서 조회.
     func serverDisplayName(for serverId: UUID) -> String? {
         store.servers.first { $0.id == serverId }?.displayName
+    }
+
+    // MARK: - Favorites
+
+    func isFavorite(serverId: UUID, port: Int) -> Bool {
+        favorites.contains(FavoriteKey(serverId: serverId, remotePort: port))
+    }
+
+    func toggleFavorite(serverId: UUID, port: Int) {
+        favorites.toggle(FavoriteKey(serverId: serverId, remotePort: port))
     }
 
     // MARK: - Server CRUD

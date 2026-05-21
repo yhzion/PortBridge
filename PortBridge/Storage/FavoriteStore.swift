@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 
-@MainActor
 @Observable
 final class FavoriteStore {
     private(set) var favorites: Set<FavoriteKey> = []
