@@ -38,9 +38,37 @@ struct PortScanner {
             parsed = ScanOutputParser.parseLsof(result.stdout)
         }
 
-        let deduped = Array(Set(parsed))
+        let deduped = Self.deduplicateSamePort(parsed)
         return deduped
             .filter { range.contains($0.port) }
             .sorted { $0.port < $1.port }
+    }
+
+    private static func deduplicateSamePort(_ ports: [RemotePort]) -> [RemotePort] {
+        let grouped = Dictionary(grouping: ports, by: \.port)
+        return grouped.map { port, matches in
+            RemotePort(
+                port: port,
+                address: representativeAddress(for: matches),
+                processName: matches.first { port in
+                    guard let name = port.processName else { return false }
+                    return !name.isEmpty
+                }?.processName
+            )
+        }
+    }
+
+    private static func representativeAddress(for ports: [RemotePort]) -> String {
+        let addresses = ports.map(\.address)
+        if addresses.contains("0.0.0.0") || addresses.contains("::") {
+            return "0.0.0.0"
+        }
+        if addresses.contains("127.0.0.1") {
+            return "127.0.0.1"
+        }
+        if addresses.contains("::1") {
+            return "::1"
+        }
+        return addresses.sorted().first ?? ""
     }
 }

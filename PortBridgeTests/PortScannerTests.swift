@@ -38,6 +38,44 @@ final class PortScannerTests: XCTestCase {
         XCTAssertEqual(ports.first?.port, 3000)
     }
 
+    func test_scan_deduplicatesIPv4AndIPv6WildcardForSamePort() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(
+                exitCode: 0,
+                stdout: """
+                LISTEN 0 4096 0.0.0.0:8000 0.0.0.0:* users:(("vllm",pid=1,fd=3))
+                LISTEN 0 4096 [::]:8000 [::]:* users:(("vllm",pid=1,fd=4))
+                """,
+                stderr: ""
+            )
+        ]
+        let scanner = PortScanner(runner: mock)
+        let ports = try await scanner.scan(server: makeServer())
+        XCTAssertEqual(ports.count, 1)
+        XCTAssertEqual(ports.first?.port, 8000)
+        XCTAssertEqual(ports.first?.address, "0.0.0.0")
+        XCTAssertEqual(ports.first?.processName, "vllm")
+    }
+
+    func test_scan_deduplicatesLoopbackForSamePort() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(
+                exitCode: 0,
+                stdout: """
+                LISTEN 0 4096 127.0.0.1:8000 0.0.0.0:*
+                LISTEN 0 4096 [::1]:8000 [::]:*
+                """,
+                stderr: ""
+            )
+        ]
+        let scanner = PortScanner(runner: mock)
+        let ports = try await scanner.scan(server: makeServer())
+        XCTAssertEqual(ports.count, 1)
+        XCTAssertEqual(ports.first?.address, "127.0.0.1")
+    }
+
     func test_authFailedStderr_throwsAuthError() async throws {
         let mock = MockCommandRunner()
         mock.responses = [
