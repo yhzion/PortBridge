@@ -177,17 +177,50 @@ final class AppViewModel {
         Task { await section.scan() }
     }
 
-    func updateServer(_ server: Server) {
+    /// 서버 정보를 갱신한다. 접속 식별자(user/host/port)가 변경되었고 활성 forwarding이 있으면
+    /// 옛 ssh 프로세스를 정리(stopAndWait)한 뒤 새 서버 정보로 동일한 (remotePort, localPort)
+    /// 쌍을 재시작한다. 이름(name)만 바뀐 경우엔 재접속하지 않는다.
+    ///
+    /// 재시작 실패는 `startForwarding`의 일반 에러 처리(토스트/포트충돌 다이얼로그)에 위임 —
+    /// 옛 서버로의 자동 롤백은 수행하지 않는다.
+    func updateServer(_ server: Server) async {
+        let oldServer = store.servers.first(where: { $0.id == server.id })
         store.update(server)
         serverSections
             .first { $0.server.id == server.id }?
             .update(server: server)
+
+        guard let oldServer, Self.connectionIdentityChanged(old: oldServer, new: server) else {
+            return
+        }
+
+        let toRestart: [(id: UUID, remotePort: Int, localPort: Int)] = forwardings
+            .filter { $0.serverId == server.id }
+            .map { (id: $0.id, remotePort: $0.remotePort, localPort: $0.localPort) }
+        guard !toRestart.isEmpty else { return }
+
+        forwardings.removeAll { fw in toRestart.contains { $0.id == fw.id } }
+        for entry in toRestart {
+            await tunnels.stopAndWait(entry.id)
+        }
+        for entry in toRestart {
+            await startForwarding(server: server, remotePort: entry.remotePort, localPort: entry.localPort)
+        }
+    }
+
+    private static func connectionIdentityChanged(old: Server, new: Server) -> Bool {
+        old.user != new.user || old.host != new.host || old.port != new.port
     }
 
     func deleteServer(_ server: Server) {
         stopAll(for: server.id)
         store.delete(server)
         serverSections.removeAll { $0.server.id == server.id }
+    }
+
+    /// `(user, host, port)` 3튜플 기준 중복 여부. 편집 시 `excluding`에 자기 id를 전달.
+    func isDuplicateServer(user: String, host: String, port: Int, excluding id: UUID? = nil) -> Bool {
+        store.isDuplicate(user: user, host: host, port: port, excluding: id)
     }
 
     // MARK: - Scanning

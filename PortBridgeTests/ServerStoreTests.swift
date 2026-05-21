@@ -70,4 +70,52 @@ final class ServerStoreTests: XCTestCase {
         store.add(b)
         XCTAssertEqual(store.servers.map(\.host), ["a", "b"])
     }
+
+    // MARK: - Duplicate detection
+
+    func test_isDuplicate_emptyStore_returnsFalse() {
+        let store = ServerStore(defaults: defaults)
+        XCTAssertFalse(store.isDuplicate(user: "u", host: "h", port: 22))
+    }
+
+    func test_isDuplicate_sameUserHostPort_returnsTrue() {
+        let store = ServerStore(defaults: defaults)
+        store.add(Server(user: "alice", host: "10.0.0.1", port: 22))
+        XCTAssertTrue(store.isDuplicate(user: "alice", host: "10.0.0.1", port: 22))
+    }
+
+    func test_isDuplicate_sameHostDifferentUser_returnsFalse() {
+        let store = ServerStore(defaults: defaults)
+        store.add(Server(user: "alice", host: "10.0.0.1", port: 22))
+        XCTAssertFalse(store.isDuplicate(user: "bob", host: "10.0.0.1", port: 22))
+    }
+
+    func test_isDuplicate_sameHostDifferentPort_returnsFalse() {
+        let store = ServerStore(defaults: defaults)
+        store.add(Server(user: "alice", host: "10.0.0.1", port: 22))
+        XCTAssertFalse(store.isDuplicate(user: "alice", host: "10.0.0.1", port: 2222))
+    }
+
+    /// 편집 시: 자기 자신은 중복으로 잡지 않아야 한다.
+    func test_isDuplicate_excludingSelfId_returnsFalse() {
+        let store = ServerStore(defaults: defaults)
+        let s = Server(user: "alice", host: "10.0.0.1", port: 22)
+        store.add(s)
+        XCTAssertFalse(
+            store.isDuplicate(user: "alice", host: "10.0.0.1", port: 22, excluding: s.id)
+        )
+    }
+
+    /// 편집 시: 자기 자신이 아닌 다른 서버와 충돌하면 중복.
+    func test_isDuplicate_excludingSelf_butAnotherServerClashes_returnsTrue() {
+        let store = ServerStore(defaults: defaults)
+        let editing = Server(user: "alice", host: "10.0.0.1", port: 22)
+        let other = Server(user: "alice", host: "10.0.0.2", port: 22)
+        store.add(editing)
+        store.add(other)
+        // editing을 "10.0.0.2"로 바꾸려는 시도 → other와 충돌
+        XCTAssertTrue(
+            store.isDuplicate(user: "alice", host: "10.0.0.2", port: 22, excluding: editing.id)
+        )
+    }
 }

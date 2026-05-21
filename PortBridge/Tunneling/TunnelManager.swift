@@ -7,6 +7,9 @@ protocol TunnelManaging: AnyObject {
     var delegate: TunnelManagerDelegate? { get set }
     func start(server: Server, remotePort: Int, localPort: Int) async throws -> Forwarding
     func stop(_ id: UUID)
+    /// SIGTERM 후 프로세스가 실제로 종료될 때까지 대기. 같은 localport로 즉시 재시작할 때
+    /// "Address already in use" 충돌을 피하기 위해 사용 (자동 재접속 경로 등).
+    func stopAndWait(_ id: UUID) async
     func shutdownAll()
 }
 
@@ -129,6 +132,17 @@ final class TunnelManager: TunnelManaging {
         tunnel.process.terminate()
         tunnel.stderrContinuation.finish()
         active.removeValue(forKey: id)
+    }
+
+    func stopAndWait(_ id: UUID) async {
+        guard let tunnel = active[id] else { return }
+        (tunnel.process.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
+        tunnel.monitorTask?.cancel()
+        let process = tunnel.process
+        process.terminate()
+        tunnel.stderrContinuation.finish()
+        active.removeValue(forKey: id)
+        await Self.waitForExit(process)
     }
 
     func shutdownAll() {

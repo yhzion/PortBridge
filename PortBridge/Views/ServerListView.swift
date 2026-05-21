@@ -39,10 +39,21 @@ struct ServerListView: View {
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.activeForwardings.map(\.id))
         .sheet(isPresented: $showAddSheet) {
-            AddServerSheet { server in vm.addServer(server) }
+            AddServerSheet(
+                isDuplicate: { u, h, p in vm.isDuplicateServer(user: u, host: h, port: p) }
+            ) { server in
+                vm.addServer(server)
+            }
         }
         .sheet(item: $editingServer) { server in
-            AddServerSheet(editing: server) { updated in vm.updateServer(updated) }
+            AddServerSheet(
+                editing: server,
+                isDuplicate: { u, h, p in
+                    vm.isDuplicateServer(user: u, host: h, port: p, excluding: server.id)
+                }
+            ) { updated in
+                Task { await vm.updateServer(updated) }
+            }
         }
         .confirmationDialog(
             "서버 삭제",

@@ -20,14 +20,14 @@ final class AppViewModelDisplayNameLookupTests: XCTestCase {
         super.tearDown()
     }
 
-    func test_serverDisplayName_returnsCurrentNameAfterRename() {
+    func test_serverDisplayName_returnsCurrentNameAfterRename() async {
         let store = ServerStore(defaults: defaults)
         let original = Server(name: "prod", user: "ubuntu", host: "10.0.0.1", port: 22)
         store.add(original)
         let vm = AppViewModel(store: store)
 
         let renamed = Server(id: original.id, name: "production", user: "ubuntu", host: "10.0.0.1", port: 22)
-        vm.updateServer(renamed)
+        await vm.updateServer(renamed)
 
         XCTAssertEqual(vm.serverDisplayName(for: original.id), renamed.displayName)
     }
