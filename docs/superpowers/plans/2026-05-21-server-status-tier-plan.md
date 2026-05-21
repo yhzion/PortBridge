@@ -1304,7 +1304,7 @@ Expected: `PortBridge/Models/PortBridgeError.swift`의 enum 정의와 `errorDesc
 
 - [ ] **Step 2: Remove cases from enum and errorDescription**
 
-`PortBridge/Models/PortBridgeError.swift` 전체:
+`PortBridge/Models/PortBridgeError.swift` 전체 (참고: `scanOutputUnparseable` · `localPortInUse` · `tunnelCrashed`는 이미 커밋 `5be8a89`에서 dead code로 제거된 상태):
 
 ```swift
 import Foundation
@@ -1313,10 +1313,7 @@ enum PortBridgeError: LocalizedError, Equatable {
     case sshAuthFailed(host: String)
     case serverUnreachable(host: String, reason: String)
     case remoteToolsMissing
-    case scanOutputUnparseable(String)
-    case localPortInUse(Int)
     case forwardingDiedEarly(stderr: String)
-    case tunnelCrashed(id: UUID, stderr: String)
 
     var errorDescription: String? {
         switch self {
@@ -1326,14 +1323,8 @@ enum PortBridgeError: LocalizedError, Equatable {
             return "\(host) 서버에 연결할 수 없습니다."
         case .remoteToolsMissing:
             return "원격 서버에 ss 또는 lsof가 필요합니다."
-        case .scanOutputUnparseable(let preview):
-            return "스캔 출력 파싱 실패: \(preview)"
-        case .localPortInUse(let port):
-            return "로컬 포트 \(port)이(가) 이미 사용 중입니다."
         case .forwardingDiedEarly(let stderr):
             return "포워딩이 즉시 종료되었습니다: \(stderr)"
-        case .tunnelCrashed(_, let stderr):
-            return "터널이 끊겼습니다: \(stderr)"
         }
     }
 }
