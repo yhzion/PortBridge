@@ -79,7 +79,7 @@ struct ServerListView: View {
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: PBLayout.Space.s3) {
             Image(systemName: "server.rack")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.tertiary)
@@ -99,7 +99,7 @@ struct ServerListView: View {
     }
 
     private var noSearchResultsView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: PBLayout.Space.s3) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.tertiary)
@@ -201,13 +201,13 @@ struct ServerListView: View {
                 vm.toggleAllExpanded()
             }
         )
-        .padding(.horizontal, 16)
+        .padding(.horizontal, PBLayout.Space.s4)
         .padding(.vertical, 6)
         .background(.bar)
     }
 
     private var serverListHeader: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PBLayout.Space.s2) {
             if vm.serverSections.isEmpty {
                 Text("서버를 추가하세요")
                     .font(.caption)
@@ -221,7 +221,7 @@ struct ServerListView: View {
                     .focused($isSearchFocused)
                     .controlSize(.small)
                     .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, PBLayout.Space.s1)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(Color(nsColor: .textBackgroundColor))
@@ -273,8 +273,8 @@ struct ServerListView: View {
             .accessibilityLabel("서버 추가")
             .keyboardShortcut("n", modifiers: .command)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, PBLayout.Space.s3)
+        .padding(.vertical, PBLayout.Space.s2)
         .background(.bar)
     }
 }

@@ -30,14 +30,14 @@ struct ContentView: View {
     @ViewBuilder
     private var errorStack: some View {
         if !vm.errors.isEmpty {
-            VStack(spacing: 4) {
+            VStack(spacing: PBLayout.Space.s1) {
                 ForEach(vm.errors) { toast in
                     errorToast(toast)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .padding(.horizontal)
-            .padding(.bottom, 4)
+            .padding(.bottom, PBLayout.Space.s1)
             .animation(.spring(response: 0.3, dampingFraction: 0.85), value: vm.errors.map(\.id))
         }
     }
@@ -65,11 +65,11 @@ struct ContentView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
                 .fill(Color.red.opacity(0.08))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
                 .strokeBorder(Color.red.opacity(0.25), lineWidth: 1)
         )
     }
@@ -110,7 +110,7 @@ struct PortConflictSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: PBLayout.Space.s3) {
             Text(verbatim: "로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다")
                 .font(.headline)
             Text(verbatim: "다른 로컬 포트를 입력하세요. 리모트는 \(serverDisplayName ?? "서버"):\(conflict.remotePort).")

@@ -118,7 +118,7 @@ struct ForwardingRowView: View {
                     .help(String(msg))
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, PBLayout.Space.s1)
         .onHover { isRowHovering = $0 }
     }
 
@@ -175,24 +175,24 @@ private struct OpenInBrowserButton: View {
         Button {
             if let url { NSWorkspace.shared.open(url) }
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: PBLayout.Space.s1) {
                 Image(systemName: "arrow.up.right.square")
                     .imageScale(.small)
                 Text("브라우저에서 열기")
                     .font(.caption)
             }
             .foregroundStyle(.tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, PBLayout.Space.s2)
+            .padding(.vertical, PBLayout.Space.s1)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
                     .fill(backgroundFill)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
                     .strokeBorder(isHovering ? Color.PB.accentStrokeHover : Color.PB.accentStrokeSubtle, lineWidth: 1)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in

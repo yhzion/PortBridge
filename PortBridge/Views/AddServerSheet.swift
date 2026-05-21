@@ -64,7 +64,7 @@ struct AddServerSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: PBLayout.Space.s4) {
             Text(editing == nil ? "서버 추가" : "서버 편집")
                 .font(.headline)
 

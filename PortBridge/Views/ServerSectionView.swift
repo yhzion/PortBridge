@@ -57,20 +57,20 @@ struct ServerSectionView: View {
             Text("↻ 버튼을 눌러 포트를 스캔하세요")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
+                .padding(.vertical, PBLayout.Space.s1)
 
         case .scanning:
-            HStack(spacing: 8) {
+            HStack(spacing: PBLayout.Space.s2) {
                 ProgressView().controlSize(.small)
                 Text("스캔 중…").font(.caption).foregroundStyle(.secondary)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, PBLayout.Space.s1)
 
         case .loaded where inactivePorts.isEmpty:
             Text("포워딩되지 않은 포트 없음")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
+                .padding(.vertical, PBLayout.Space.s1)
 
         case .loaded:
             ForEach(inactivePorts) { port in
@@ -94,7 +94,7 @@ struct ServerSectionView: View {
             Label(msg, systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.red)
-                .padding(.vertical, 4)
+                .padding(.vertical, PBLayout.Space.s1)
 
         case .authFailed(let cmd):
             AuthFailedView(copyCommand: cmd) { Task { await section.scan() } }
@@ -117,9 +117,9 @@ struct ServerSectionView: View {
     }
 
     private var sectionHeader: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PBLayout.Space.s2) {
             Button(action: handleRowTap) {
-                HStack(spacing: 8) {
+                HStack(spacing: PBLayout.Space.s2) {
                     if !isOffline {
                         Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
                             .font(.caption)
@@ -255,9 +255,9 @@ private struct ServerMonogram: View {
         )
         ZStack(alignment: .bottomTrailing) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
                     .fill(tint.opacity(Color.PB.Monogram.fillOpacity))
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
                     .strokeBorder(tint.opacity(Color.PB.Monogram.strokeOpacity), lineWidth: 0.5)
                 Text(initial)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -313,11 +313,11 @@ private struct AuthFailedView: View {
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
             Label("SSH 키 인증 실패", systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.orange)
-            HStack(spacing: 8) {
+            HStack(spacing: PBLayout.Space.s2) {
                 Text(verbatim: copyCommand)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
@@ -338,7 +338,7 @@ private struct AuthFailedView: View {
                 .accessibilityLabel(copied ? "복사됨" : "명령 복사")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, PBLayout.Space.s1)
     }
 
     private func copy() {
@@ -360,7 +360,7 @@ private struct ToolInstallGuideView: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
             Label("원격 서버에 ss 또는 lsof가 필요합니다", systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.orange)
@@ -369,7 +369,7 @@ private struct ToolInstallGuideView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: PBLayout.Space.s1) {
                 ForEach(commands, id: \.distro) { item in
                     InstallCommandRow(distro: item.distro, command: item.command)
                 }
@@ -385,7 +385,7 @@ private struct InstallCommandRow: View {
     @State private var copied = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PBLayout.Space.s2) {
             Text(distro)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
