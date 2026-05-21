@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Release 빌드 후 /Applications 에 설치한다.
+# Release 빌드 후 ad-hoc 서명하여 /Applications 에 설치한다.
 # 사용: ./install.sh
 set -euo pipefail
 
@@ -11,6 +11,7 @@ xcodebuild \
   -scheme PortBridge \
   -configuration Release \
   -derivedDataPath build \
+  CODE_SIGNING_ALLOWED=NO \
   clean build \
   > /tmp/portbridge-build.log 2>&1 \
   || { echo "✘ 빌드 실패. /tmp/portbridge-build.log 확인"; exit 1; }
@@ -23,11 +24,18 @@ if [ ! -d "$APP_SOURCE" ]; then
   exit 1
 fi
 
+echo "▶ ad-hoc 서명…"
+codesign --force --deep --options runtime --sign - "$APP_SOURCE"
+codesign --verify --deep --strict "$APP_SOURCE"
+
 echo "▶ 기존 설치 제거…"
 rm -rf "$APP_TARGET"
 
 echo "▶ /Applications 에 복사…"
 cp -R "$APP_SOURCE" "$APP_TARGET"
+
+echo "▶ Gatekeeper quarantine 속성 제거…"
+xattr -dr com.apple.quarantine "$APP_TARGET" 2>/dev/null || true
 
 echo "✓ 설치 완료: $APP_TARGET"
 echo ""

@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ad-hoc signed macOS app
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Release app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project PortBridge.xcodeproj \
+            -scheme PortBridge \
+            -configuration Release \
+            -derivedDataPath build/Release \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Ad-hoc sign and package
+        run: |
+          set -euo pipefail
+          APP_PATH="build/Release/Build/Products/Release/PortBridge.app"
+          DIST_DIR="dist"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Missing app bundle: $APP_PATH" >&2
+            exit 1
+          fi
+
+          mkdir -p "$DIST_DIR"
+          codesign --force --deep --options runtime --sign - "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          ditto -c -k --keepParent "$APP_PATH" "$DIST_DIR/PortBridge.zip"
+          shasum -a 256 "$DIST_DIR/PortBridge.zip" > "$DIST_DIR/PortBridge.zip.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortBridge
+          path: |
+            dist/PortBridge.zip
+            dist/PortBridge.zip.sha256
+
+      - name: Upload GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" dist/PortBridge.zip dist/PortBridge.zip.sha256 --clobber
+          else
+            gh release create "$TAG_NAME" dist/PortBridge.zip dist/PortBridge.zip.sha256 \
+              --title "$TAG_NAME" \
+              --generate-notes
+          fi

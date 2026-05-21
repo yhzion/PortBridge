@@ -92,9 +92,7 @@ struct ServerListView: View {
                     count: vm.serverSections.count,
                     allExpanded: vm.allExpanded,
                     onToggleAll: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            vm.toggleAllExpanded()
-                        }
+                        vm.toggleAllExpanded()
                     }
                 )
             }
