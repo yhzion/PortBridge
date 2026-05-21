@@ -89,4 +89,33 @@ final class AppPreferencesTests: XCTestCase {
         )
         XCTAssertFalse(prefs.launchAtLogin)
     }
+
+    func test_automaticUpdateCheckEnabled_defaultsToTrue() {
+        let prefs = AppPreferences(
+            defaults: defaults,
+            applyShowInDock: { _ in },
+            applyLaunchAtLogin: { _ in true },
+            readLaunchAtLogin: { false }
+        )
+        XCTAssertTrue(prefs.automaticUpdateCheckEnabled)
+    }
+
+    func test_automaticUpdateCheckEnabled_persists() {
+        let prefs = AppPreferences(
+            defaults: defaults,
+            applyShowInDock: { _ in },
+            applyLaunchAtLogin: { _ in true },
+            readLaunchAtLogin: { false }
+        )
+        prefs.automaticUpdateCheckEnabled = false
+        XCTAssertFalse(defaults.bool(forKey: "PortBridge.AutomaticUpdateCheckEnabled"))
+
+        let prefs2 = AppPreferences(
+            defaults: defaults,
+            applyShowInDock: { _ in },
+            applyLaunchAtLogin: { _ in true },
+            readLaunchAtLogin: { false }
+        )
+        XCTAssertFalse(prefs2.automaticUpdateCheckEnabled)
+    }
 }
