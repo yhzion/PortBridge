@@ -119,15 +119,12 @@ struct ServerSectionView: View {
     private var sectionHeader: some View {
         HStack(spacing: 8) {
             if !isOffline {
-                Button(action: toggleExpandedAnimated) {
-                    Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 12)
-                        .transaction { $0.animation = nil }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(section.isExpanded ? "접기" : "펼치기")
+                Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12)
+                    .transaction { $0.animation = nil }
+                    .accessibilityHidden(true)
             } else {
                 // 12px 자리 비움 — 다른 행과 가로 정렬 유지
                 Color.clear.frame(width: 12, height: 12)
