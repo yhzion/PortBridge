@@ -14,6 +14,10 @@ struct ServerSectionView: View {
         activeForwardings.filter { $0.serverId == section.server.id }.count
     }
 
+    private var activeCountAccessibility: String {
+        "포워딩 중인 포트 \(activeCount)개"
+    }
+
     private var inactivePorts: [RemotePort] {
         let activeNums = Set(
             activeForwardings
@@ -138,7 +142,7 @@ struct ServerSectionView: View {
             Spacer(minLength: 8)
 
             if activeCount > 0 && !isOffline {
-                Text("\(activeCount)")
+                Text(verbatim: "\(activeCount)")
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.tint)
@@ -146,7 +150,7 @@ struct ServerSectionView: View {
                     .padding(.vertical, 1)
                     .background(Color.PB.accentBadgeBg, in: Capsule())
                     .help("이 서버에서 포워딩 중인 포트 수")
-                    .accessibilityLabel("포워딩 중인 포트 \(activeCount)개")
+                    .accessibilityLabel(activeCountAccessibility)
             }
 
             if case .scanning = section.scanState {

@@ -60,7 +60,7 @@ struct ForwardingRowView: View {
                 .frame(width: 18, height: 18)
 
             if showPortColumn {
-                Text(":\(port.port)")
+                Text(verbatim: ":\(port.port)")
                     .font(.system(.body, design: .monospaced).bold())
                     .monospacedDigit()
                     .foregroundStyle(isErrorState ? .red : isActive ? .green : .primary)
@@ -150,6 +150,7 @@ private struct OpenInBrowserButton: View {
     @State private var isPressed = false
 
     private var url: URL? { URL(string: "http://localhost:\(localPort)") }
+    private var helpText: String { "기본 브라우저로 http://localhost:\(localPort) 열기" }
 
     var body: some View {
         Button {
@@ -186,7 +187,7 @@ private struct OpenInBrowserButton: View {
         )
         .animation(.easeOut(duration: 0.08), value: isHovering)
         .animation(.easeOut(duration: 0.08), value: isPressed)
-        .help("기본 브라우저로 http://localhost:\(localPort) 열기")
+        .help(helpText)
     }
 
     private var backgroundFill: Color {
