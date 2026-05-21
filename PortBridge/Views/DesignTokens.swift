@@ -53,6 +53,77 @@ extension Color {
             static let strokeOpacity: Double = 0.40
         }
 
+        // MARK: - Background
+
+        // macOS 시스템 설정과 동일한 표면 계층. NSColor 시맨틱을 그대로 alias.
+        // Tahoe에서 카드(`bgSurface`)가 캔버스(`bgCanvas`)보다 밝은 점에 유의 — iOS와 반대.
+
+        /// 윈도우 전체 캔버스 배경.
+        static let bgCanvas = Color(nsColor: .windowBackgroundColor)
+
+        /// 그룹 카드/리스트 배경. 캔버스 위 1단계.
+        static let bgSurface = Color(nsColor: .controlBackgroundColor)
+
+        /// 카드 내부의 인셋 영역 배경 (한 단계 더 들어간 표면).
+        static let bgSurfaceSecondary = Color(nsColor: .underPageBackgroundColor)
+
+        // MARK: - Text
+
+        // 시스템 시맨틱 — High Contrast / Increase Contrast 자동 대응 + WCAG 4.5:1 보장.
+
+        /// 본문/타이틀.
+        static let textPrimary = Color(nsColor: .labelColor)
+
+        /// 설명/캡션 ("선호하는 …을 선택하세요" 류).
+        static let textSecondary = Color(nsColor: .secondaryLabelColor)
+
+        /// 보조 캡션 ("여러 가지 색상" 같은 미세 텍스트).
+        static let textTertiary = Color(nsColor: .tertiaryLabelColor)
+
+        /// 비활성/placeholder 텍스트.
+        static let textPlaceholder = Color(nsColor: .placeholderTextColor)
+
+        // MARK: - Separator
+
+        /// 행/섹션 구분선. Apple이 §1.4.11 Non-text Contrast 3:1을 자동 보장.
+        static let separator = Color(nsColor: .separatorColor)
+
+        // MARK: - System Accent Palette
+
+        /// macOS 시스템 컬러 13종 — 라이트/다크 자동 분기 + Increase Contrast 대응.
+        ///
+        /// 사용자 선호 액센트를 따르려면 `Color.accentColor`를 쓰세요;
+        /// 여기 정의된 토큰은 "특정 색"이 의미를 갖는 경우(상태/카테고리)에만.
+        enum Accent {
+            static let red = Color(nsColor: .systemRed)
+            static let orange = Color(nsColor: .systemOrange)
+            static let yellow = Color(nsColor: .systemYellow)
+            static let green = Color(nsColor: .systemGreen)
+            static let mint = Color(nsColor: .systemMint)
+            static let teal = Color(nsColor: .systemTeal)
+            static let cyan = Color(nsColor: .systemCyan)
+            static let blue = Color(nsColor: .systemBlue)
+            static let indigo = Color(nsColor: .systemIndigo)
+            static let purple = Color(nsColor: .systemPurple)
+            static let pink = Color(nsColor: .systemPink)
+            static let brown = Color(nsColor: .systemBrown)
+            static let gray = Color(nsColor: .systemGray)
+        }
+
+        // MARK: - Glass (Liquid Glass materials)
+
+        /// 스크린샷의 그룹 카드/사이드바는 단일 색이 아니라 블러 머티리얼.
+        ///
+        /// `.background(Color.PB.Glass.regular, in: RoundedRectangle(cornerRadius: 14))` 형태로 사용.
+        enum Glass {
+            /// 그룹 카드 기본 (테마/윈도우/스크롤 컨테이너).
+            static let regular: Material = .regular
+            /// 사이드바·팝오버 등 더 두꺼운 블러.
+            static let thick: Material = .thick
+            /// 툴팁·플로팅 헤더 등 가벼운 블러.
+            static let thin: Material = .thin
+        }
+
         // MARK: - Helpers
 
         private static func dynamic(dark: NSColor, light: NSColor) -> Color {
