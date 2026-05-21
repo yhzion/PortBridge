@@ -17,9 +17,9 @@ final class ServerSectionViewModelTests: XCTestCase {
     @MainActor
     func test_scan_success_setsLoaded() async {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 0, stdout: "LISTEN 0 128 0.0.0.0:3000 0.0.0.0:*", stderr: "")
-        ]
+        ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
         guard case .loaded(let ports) = vm.scanState else {
@@ -32,9 +32,9 @@ final class ServerSectionViewModelTests: XCTestCase {
     @MainActor
     func test_scan_authFailed_setsAuthFailed() async {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "Permission denied (publickey).")
-        ]
+        ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
         guard case .authFailed(let cmd) = vm.scanState else {
@@ -47,9 +47,9 @@ final class ServerSectionViewModelTests: XCTestCase {
     @MainActor
     func test_scan_connectTimeout_setsOffline() async {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "Connection timed out")
-        ]
+        ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
         guard case .offline(let isRetrying) = vm.scanState else {
@@ -61,9 +61,9 @@ final class ServerSectionViewModelTests: XCTestCase {
     @MainActor
     func test_ports_whenLoaded_returnsPorts() async {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 0, stdout: "LISTEN 0 128 0.0.0.0:8080 0.0.0.0:*", stderr: "")
-        ]
+        ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
         XCTAssertEqual(vm.ports.count, 1)
@@ -96,9 +96,9 @@ final class ServerSectionViewModelTests: XCTestCase {
     @MainActor
     func test_scan_noRouteToHost_setsOffline() async {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: No route to host")
-        ]
+        ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
         if case .offline = vm.scanState { return }
@@ -108,9 +108,9 @@ final class ServerSectionViewModelTests: XCTestCase {
     @MainActor
     func test_scan_toolsMissing_setsToolMissing() async {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 127, stdout: "", stderr: "PORTBRIDGE_TOOLS_MISSING")
-        ]
+        ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
         XCTAssertEqual(vm.scanState, .toolMissing)
@@ -120,10 +120,10 @@ final class ServerSectionViewModelTests: XCTestCase {
     func test_scan_fromOffline_silentlyRetries() async {
         // 첫 스캔: 오프라인
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "No route to host"),
             CommandResult(exitCode: 255, stdout: "", stderr: "No route to host"),
-        ]
+        ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
         guard case .offline(false) = vm.scanState else {

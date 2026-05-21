@@ -1,15 +1,23 @@
 import Foundation
 @testable import PortBridge
 
-final class MockCommandRunner: CommandRunner, @unchecked Sendable {
+actor MockCommandRunner: CommandRunner {
     struct Call: Equatable {
         let executable: String
         let args: [String]
     }
 
-    var calls: [Call] = []
-    var responses: [CommandResult] = []
-    var error: Error?
+    private(set) var calls: [Call] = []
+    private var responses: [CommandResult] = []
+    private var error: Error?
+
+    func setResponses(_ responses: [CommandResult]) {
+        self.responses = responses
+    }
+
+    func setError(_ error: Error?) {
+        self.error = error
+    }
 
     func run(_ executable: String, args: [String], timeout: TimeInterval) async throws -> CommandResult {
         calls.append(Call(executable: executable, args: args))
