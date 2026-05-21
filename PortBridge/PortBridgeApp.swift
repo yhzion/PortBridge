@@ -30,6 +30,7 @@ private struct MainContentHost: View {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let viewModel: AppViewModel
     private var menuBarController: MenuBarController?
