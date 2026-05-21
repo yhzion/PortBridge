@@ -72,10 +72,10 @@ struct ServerSectionView: View {
             }
 
         case .offline:
-            EmptyView()
+            EmptyView()   // 안전망 — body는 isOffline 분기로 이미 미렌더되지만 switch exhaustiveness 위해 유지
 
         case .toolMissing:
-            EmptyView()
+            ToolInstallGuideView()
 
         case .error(let msg):
             Label(msg, systemImage: "exclamationmark.triangle")
