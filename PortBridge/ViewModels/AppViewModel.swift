@@ -10,10 +10,10 @@ final class AppViewModel {
     private let tunnels: TunnelManager
 
     private(set) var serverSections: [ServerSectionViewModel] = []
-    var forwardings: [Forwarding] = []
+    private(set) var forwardings: [Forwarding] = []
     private(set) var activatedAt: [UUID: Date] = [:]
     var pendingPortConflict: PortConflict?
-    var errors: [ErrorToast] = []
+    private(set) var errors: [ErrorToast] = []
     var searchText: String = ""
 
     private let errorDisplayDuration: TimeInterval = 5
