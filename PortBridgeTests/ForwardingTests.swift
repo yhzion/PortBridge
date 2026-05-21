@@ -10,8 +10,8 @@ final class ForwardingTests: XCTestCase {
         XCTAssertNotEqual(a.id, b.id)
     }
 
-    func test_stateTransitionsRepresented() {
-        let states: [Forwarding.State] = [.idle, .starting, .active, .error("oops")]
-        XCTAssertEqual(states.count, 4)
+    func test_errorState_equatableByAssociatedValue() {
+        XCTAssertEqual(Forwarding.State.error("a"), Forwarding.State.error("a"))
+        XCTAssertNotEqual(Forwarding.State.error("a"), Forwarding.State.error("b"))
     }
 }

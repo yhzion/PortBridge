@@ -29,7 +29,7 @@ final class AppViewModelDisplayNameLookupTests: XCTestCase {
         let renamed = Server(id: original.id, name: "production", user: "ubuntu", host: "10.0.0.1", port: 22)
         vm.updateServer(renamed)
 
-        XCTAssertEqual(vm.serverDisplayName(for: original.id), "production (10.0.0.1)")
+        XCTAssertEqual(vm.serverDisplayName(for: original.id), renamed.displayName)
     }
 
     func test_serverDisplayName_returnsNilForUnknownId() {
