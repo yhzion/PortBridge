@@ -70,6 +70,44 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         menu.autoenablesItems = false
 
+        // Update available (only when a non-skipped newer release exists)
+        if let release = viewModel.updates.availableUpdate {
+            let tag = release.tagName
+            let item = NSMenuItem(
+                title: "Update available — \(tag)",
+                action: #selector(openReleasePage(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = release.htmlURL
+            item.image = NSImage(
+                systemSymbolName: "arrow.down.circle.fill",
+                accessibilityDescription: nil
+            )
+
+            let submenu = NSMenu()
+            let skip = NSMenuItem(
+                title: "Skip This Version",
+                action: #selector(skipCurrentRelease),
+                keyEquivalent: ""
+            )
+            skip.target = self
+            submenu.addItem(skip)
+
+            let notes = NSMenuItem(
+                title: "Show Release Notes…",
+                action: #selector(openReleasePage(_:)),
+                keyEquivalent: ""
+            )
+            notes.target = self
+            notes.representedObject = release.htmlURL
+            submenu.addItem(notes)
+
+            item.submenu = submenu
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
+
         // Favorites
         let favHeader = NSMenuItem(title: "Favorites", action: nil, keyEquivalent: "")
         favHeader.isEnabled = false
@@ -227,6 +265,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func openReleasePage(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func skipCurrentRelease() {
+        viewModel.updates.skipCurrent()
     }
 
     // MARK: - Icon observation
