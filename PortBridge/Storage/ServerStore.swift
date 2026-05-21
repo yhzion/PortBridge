@@ -32,8 +32,8 @@ final class ServerStore {
     /// 편집 시에는 `excluding`에 자기 자신의 id를 전달해 자기 자신과의 비교를 제외한다.
     /// 같은 호스트에 다른 user 혹은 다른 port를 두는 사용 케이스는 정당하므로 중복으로 보지 않는다.
     func isDuplicate(user: String, host: String, port: Int, excluding id: UUID? = nil) -> Bool {
-        servers.contains { s in
-            s.id != id && s.user == user && s.host == host && s.port == port
+        servers.contains { server in
+            server.id != id && server.user == user && server.host == host && server.port == port
         }
     }
 

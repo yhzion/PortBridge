@@ -9,36 +9,36 @@ struct MenuBarIconView: View {
 
     var body: some View {
         Canvas { ctx, canvasSize in
-            let s = min(canvasSize.width, canvasSize.height) / 24
+            let scale = min(canvasSize.width, canvasSize.height) / 24
             let color = GraphicsContext.Shading.color(.black)
-            let stroke = StrokeStyle(lineWidth: 2 * s, lineCap: .round, lineJoin: .round)
+            let stroke = StrokeStyle(lineWidth: 2 * scale, lineCap: .round, lineJoin: .round)
 
             var arch = Path()
-            arch.move(to: CGPoint(x: 5.5 * s, y: 19 * s))
-            arch.addLine(to: CGPoint(x: 5.5 * s, y: 12 * s))
+            arch.move(to: CGPoint(x: 5.5 * scale, y: 19 * scale))
+            arch.addLine(to: CGPoint(x: 5.5 * scale, y: 12 * scale))
             arch.addQuadCurve(
-                to: CGPoint(x: 12 * s, y: 5.5 * s),
-                control: CGPoint(x: 5.5 * s, y: 5.5 * s)
+                to: CGPoint(x: 12 * scale, y: 5.5 * scale),
+                control: CGPoint(x: 5.5 * scale, y: 5.5 * scale)
             )
             arch.addQuadCurve(
-                to: CGPoint(x: 18.5 * s, y: 12 * s),
-                control: CGPoint(x: 18.5 * s, y: 5.5 * s)
+                to: CGPoint(x: 18.5 * scale, y: 12 * scale),
+                control: CGPoint(x: 18.5 * scale, y: 5.5 * scale)
             )
-            arch.addLine(to: CGPoint(x: 18.5 * s, y: 19 * s))
+            arch.addLine(to: CGPoint(x: 18.5 * scale, y: 19 * scale))
             ctx.stroke(arch, with: color, style: stroke)
 
             var base = Path()
-            base.move(to: CGPoint(x: 3 * s, y: 19.6 * s))
-            base.addLine(to: CGPoint(x: 21 * s, y: 19.6 * s))
+            base.move(to: CGPoint(x: 3 * scale, y: 19.6 * scale))
+            base.addLine(to: CGPoint(x: 21 * scale, y: 19.6 * scale))
             ctx.stroke(base, with: color, style: stroke)
 
             if active {
-                let r: CGFloat = 2.2 * s
+                let radius: CGFloat = 2.2 * scale
                 let dot = Path(ellipseIn: CGRect(
-                    x: 12 * s - r,
-                    y: 12.5 * s - r,
-                    width: r * 2,
-                    height: r * 2
+                    x: 12 * scale - radius,
+                    y: 12.5 * scale - radius,
+                    width: radius * 2,
+                    height: radius * 2
                 ))
                 ctx.fill(dot, with: color)
             }

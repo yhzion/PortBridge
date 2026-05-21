@@ -5,6 +5,12 @@ import Observation
 @MainActor
 @Observable
 final class AppViewModel {
+    private struct ForwardingRestartEntry {
+        let id: UUID
+        let remotePort: Int
+        let localPort: Int
+    }
+
     private let store: ServerStore
     private let scanner: PortScanner
     private let tunnels: TunnelManaging
@@ -52,8 +58,8 @@ final class AppViewModel {
         return false
     }
 
-    private static func normalize(_ s: String) -> String {
-        s.trimmingCharacters(in: .whitespaces).lowercased()
+    private static func normalize(_ string: String) -> String {
+        string.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
     var allExpanded: Bool {
@@ -62,10 +68,8 @@ final class AppViewModel {
 
     func toggleAllExpanded() {
         let shouldExpand = !allExpanded
-        for section in serverSections {
-            if section.isExpanded != shouldExpand {
-                section.toggleExpanded()
-            }
+        for section in serverSections where section.isExpanded != shouldExpand {
+            section.toggleExpanded()
         }
     }
 
@@ -78,11 +82,11 @@ final class AppViewModel {
     ) {
         self.store = store ?? ServerStore()
         self.scanner = scanner ?? PortScanner(runner: ProcessCommandRunner())
-        let t: TunnelManaging = tunnels ?? TunnelManager()
-        self.tunnels = t
+        let manager: TunnelManaging = tunnels ?? TunnelManager()
+        self.tunnels = manager
         self.favorites = favorites ?? FavoriteStore()
         self.preferences = preferences ?? AppPreferences.production()
-        t.delegate = self
+        manager.delegate = self
         rebuildSections()
     }
 
@@ -196,9 +200,9 @@ final class AppViewModel {
             return
         }
 
-        let toRestart: [(id: UUID, remotePort: Int, localPort: Int)] = forwardings
+        let toRestart: [ForwardingRestartEntry] = forwardings
             .filter { $0.serverId == server.id }
-            .map { (id: $0.id, remotePort: $0.remotePort, localPort: $0.localPort) }
+            .map { ForwardingRestartEntry(id: $0.id, remotePort: $0.remotePort, localPort: $0.localPort) }
         guard !toRestart.isEmpty else { return }
 
         forwardings.removeAll { fw in toRestart.contains { $0.id == fw.id } }
@@ -410,7 +414,8 @@ struct FavoriteRow: Identifiable, Equatable {
 
 #if DEBUG
     extension AppViewModel {
-        /// Test-only helper to inject an active forwarding state.
+        // Test-only helper to inject an active forwarding state.
+        // swiftlint:disable:next identifier_name
         func _test_injectActiveForwarding(serverId: UUID, remotePort: Int, localPort: Int? = nil) {
             let fw = Forwarding(
                 serverId: serverId,

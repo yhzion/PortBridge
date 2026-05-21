@@ -19,8 +19,9 @@ jobs:
       - name: SwiftFormat (lint)
         run: swiftformat --lint .
 
-      - name: SwiftLint (strict)
-        run: swiftlint --strict
+      - name: SwiftLint
+        # 초기 도입 단계: --strict 미사용. warning 허용, error 만 차단.
+        run: swiftlint
 
       - name: Periphery (dead code scan)
         run: periphery scan

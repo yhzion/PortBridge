@@ -102,9 +102,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let actives = viewModel.nonFavoriteActive
         if !actives.isEmpty {
             menu.addItem(.separator())
-            let h = NSMenuItem(title: "Active", action: nil, keyEquivalent: "")
-            h.isEnabled = false
-            menu.addItem(h)
+            let activeHeader = NSMenuItem(title: "Active", action: nil, keyEquivalent: "")
+            activeHeader.isEnabled = false
+            menu.addItem(activeHeader)
             for fw in actives {
                 let item = NSMenuItem(
                     title: ":\(fw.remotePort)",

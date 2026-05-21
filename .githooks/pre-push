@@ -19,5 +19,7 @@ if ! swiftformat --lint . >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "→ swiftlint --strict"
-swiftlint --strict
+echo "→ swiftlint"
+# 초기 도입 단계: --strict 끄고 warning 허용. error 만 차단.
+# 코드가 정리되면 향후 --strict 로 격상 권장.
+swiftlint

@@ -91,19 +91,19 @@ struct PortConflictSheet: View {
 
     /// 유효 로컬 포트: 1–65535이며 충돌난 포트와 달라야 함.
     private var parsedPort: Int? {
-        guard let p = Int(localPortText.trimmingCharacters(in: .whitespaces)),
-              (1 ... 65535).contains(p),
-              p != conflict.attemptedLocal else { return nil }
-        return p
+        guard let port = Int(localPortText.trimmingCharacters(in: .whitespaces)),
+              (1 ... 65535).contains(port),
+              port != conflict.attemptedLocal else { return nil }
+        return port
     }
 
     private var validationMessage: String? {
         let trimmed = localPortText.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return nil }
-        guard let p = Int(trimmed), (1 ... 65535).contains(p) else {
+        guard let port = Int(trimmed), (1 ... 65535).contains(port) else {
             return "1–65535 범위의 숫자여야 합니다"
         }
-        if p == conflict.attemptedLocal {
+        if port == conflict.attemptedLocal {
             return "이미 사용 중인 포트 \(conflict.attemptedLocal)와(과) 달라야 합니다"
         }
         return nil

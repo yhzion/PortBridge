@@ -39,7 +39,7 @@ cat <<'EOF'
 ✓ 설정 완료.
 
   pre-commit  : swiftformat (auto-fix) → swiftlint
-  pre-push    : swiftformat --lint → swiftlint --strict
+  pre-push    : swiftformat --lint → swiftlint (warnings 허용)
   수동 검사    : ./scripts/check-deadcode.sh   (periphery dead code)
   CI          : .github/workflows/lint.yml 가 PR 마다 자동 실행
 

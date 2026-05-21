@@ -3,11 +3,17 @@ import Foundation
 
 @MainActor
 final class MockTunnelManager: TunnelManaging {
+    struct StartCall {
+        let server: Server
+        let remotePort: Int
+        let localPort: Int
+    }
+
     weak var delegate: TunnelManagerDelegate?
 
     var nextResult: Forwarding!
     var nextError: Error?
-    private(set) var startCalls: [(server: Server, remotePort: Int, localPort: Int)] = []
+    private(set) var startCalls: [StartCall] = []
     private(set) var stopCalls: [UUID] = []
     private(set) var stopAndWaitCalls: [UUID] = []
     private(set) var shutdownAllCalled = false
@@ -18,7 +24,7 @@ final class MockTunnelManager: TunnelManaging {
     private var suspendContinuation: CheckedContinuation<Void, Never>?
 
     func start(server: Server, remotePort: Int, localPort: Int) async throws -> Forwarding {
-        startCalls.append((server, remotePort, localPort))
+        startCalls.append(StartCall(server: server, remotePort: remotePort, localPort: localPort))
         if shouldSuspendStart {
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 suspendContinuation = cont

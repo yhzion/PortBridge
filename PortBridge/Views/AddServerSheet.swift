@@ -6,7 +6,7 @@ struct AddServerSheet: View {
     /// 입력된 `(user, host, port)` 3튜플이 이미 존재하는지 검사. 편집 시 자기 자신은 제외.
     /// nil이면 중복 검사 자체를 생략 (프리뷰/테스트 편의).
     let isDuplicate: ((_ user: String, _ host: String, _ port: Int) -> Bool)?
-    var editing: Server? = nil
+    var editing: Server?
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String = ""
@@ -23,10 +23,10 @@ struct AddServerSheet: View {
     }
 
     private var isDuplicateInput: Bool {
-        guard let isDuplicate, !trimmedUser.isEmpty, !trimmedHost.isEmpty, let p = parsedPort else {
+        guard let isDuplicate, !trimmedUser.isEmpty, !trimmedHost.isEmpty, let port = parsedPort else {
             return false
         }
-        return isDuplicate(trimmedUser, trimmedHost, p)
+        return isDuplicate(trimmedUser, trimmedHost, port)
     }
 
     private var isValid: Bool {
@@ -38,9 +38,9 @@ struct AddServerSheet: View {
 
     /// 유효 SSH 포트: 1–65535. 0은 "임의 할당" 의미라 SSH 대상으로 부적합.
     private var parsedPort: Int? {
-        guard let p = Int(portText.trimmingCharacters(in: .whitespaces)),
-              (1 ... 65535).contains(p) else { return nil }
-        return p
+        guard let port = Int(portText.trimmingCharacters(in: .whitespaces)),
+              (1 ... 65535).contains(port) else { return nil }
+        return port
     }
 
     private var portValue: Int {
@@ -55,11 +55,11 @@ struct AddServerSheet: View {
         self.editing = editing
         self.isDuplicate = isDuplicate
         self.onSave = onSave
-        if let s = editing {
-            _name = State(initialValue: s.name ?? "")
-            _user = State(initialValue: s.user)
-            _host = State(initialValue: s.host)
-            _portText = State(initialValue: "\(s.port)")
+        if let server = editing {
+            _name = State(initialValue: server.name ?? "")
+            _user = State(initialValue: server.user)
+            _host = State(initialValue: server.host)
+            _portText = State(initialValue: "\(server.port)")
         }
     }
 

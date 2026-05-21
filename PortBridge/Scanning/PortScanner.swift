@@ -89,6 +89,6 @@ nonisolated struct PortScanner {
         if addresses.contains("::1") {
             return "::1"
         }
-        return addresses.sorted().first ?? ""
+        return addresses.min() ?? ""
     }
 }
