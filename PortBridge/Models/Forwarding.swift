@@ -1,6 +1,6 @@
 import Foundation
 
-struct Forwarding: Identifiable, Equatable {
+nonisolated struct Forwarding: Identifiable, Equatable {
     enum State: Equatable {
         case idle
         case starting

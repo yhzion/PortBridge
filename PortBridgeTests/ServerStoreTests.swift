@@ -1,6 +1,7 @@
 import XCTest
 @testable import PortBridge
 
+@MainActor
 final class ServerStoreTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!

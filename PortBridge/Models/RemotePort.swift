@@ -1,6 +1,6 @@
 import Foundation
 
-struct RemotePort: Identifiable, Hashable {
+nonisolated struct RemotePort: Identifiable, Hashable {
     let port: Int
     let address: String
     let processName: String?

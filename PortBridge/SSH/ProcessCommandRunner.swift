@@ -1,6 +1,6 @@
 import Foundation
 
-final class ProcessCommandRunner: CommandRunner, @unchecked Sendable {
+nonisolated final class ProcessCommandRunner: CommandRunner, @unchecked Sendable {
     func run(_ executable: String, args: [String], timeout: TimeInterval) async throws -> CommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)

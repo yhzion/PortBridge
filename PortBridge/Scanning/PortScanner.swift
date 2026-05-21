@@ -1,7 +1,7 @@
 // PortBridge/Scanning/PortScanner.swift
 import Foundation
 
-struct PortScanner {
+nonisolated struct PortScanner {
     let runner: CommandRunner
     let sshExecutable: String = "/usr/bin/ssh"
 

@@ -1,6 +1,6 @@
 import Foundation
 
-enum PortBridgeError: LocalizedError, Equatable {
+nonisolated enum PortBridgeError: LocalizedError, Equatable {
     case sshAuthFailed(host: String)
     case sshConnectTimeout(host: String)
     case remoteCommandNotFound

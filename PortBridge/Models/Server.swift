@@ -1,6 +1,6 @@
 import Foundation
 
-struct Server: Identifiable, Codable, Hashable {
+nonisolated struct Server: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String?
     var user: String

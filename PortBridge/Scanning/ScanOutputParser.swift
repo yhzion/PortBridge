@@ -1,6 +1,6 @@
 import Foundation
 
-enum ScanOutputParser {
+nonisolated enum ScanOutputParser {
     static func parseSS(_ output: String) -> [RemotePort] {
         var results: [RemotePort] = []
         for raw in output.components(separatedBy: .newlines) {

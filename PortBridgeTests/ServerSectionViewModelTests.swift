@@ -2,6 +2,7 @@
 import XCTest
 @testable import PortBridge
 
+@MainActor
 final class ServerSectionViewModelTests: XCTestCase {
     private func makeServer() -> Server {
         Server(user: "ubuntu", host: "10.0.0.1")
