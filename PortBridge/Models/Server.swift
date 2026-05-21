@@ -19,5 +19,7 @@ nonisolated struct Server: Identifiable, Codable, Hashable {
         name.map { "\($0) (\(host))" } ?? host
     }
 
-    var sshTarget: String { "\(user)@\(host)" }
+    var sshTarget: String {
+        "\(user)@\(host)"
+    }
 }

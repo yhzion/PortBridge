@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Safety net: run lint-only checks across the whole project before push.
+# Periphery (dead code) is intentionally NOT run here — it requires xcodebuild
+# indexing and is slow. Use `./scripts/check-deadcode.sh` manually or rely on CI.
+set -euo pipefail
+
+for tool in swiftformat swiftlint; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "❌ $tool 가 설치되어 있지 않습니다. ./scripts/setup-hooks.sh 실행 필요."
+        exit 1
+    fi
+done
+
+echo "→ swiftformat --lint (전체 프로젝트)"
+if ! swiftformat --lint . >/dev/null 2>&1; then
+    echo ""
+    echo "❌ 포맷팅 위반이 있습니다. 다음 명령으로 수정하세요:"
+    echo "   swiftformat ."
+    exit 1
+fi
+
+echo "→ swiftlint"
+# 초기 도입 단계: --strict 끄고 warning 허용. error 만 차단.
+# 코드가 정리되면 향후 --strict 로 격상 권장.
+swiftlint

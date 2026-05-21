@@ -4,8 +4,8 @@ import SwiftUI
 struct ServerListView: View {
     @Bindable var vm: AppViewModel
     @State private var showAddSheet = false
-    @State private var editingServer: Server? = nil
-    @State private var pendingDelete: Server? = nil
+    @State private var editingServer: Server?
+    @State private var pendingDelete: Server?
     @FocusState private var isSearchFocused: Bool
 
     private var isDeletePresented: Binding<Bool> {
@@ -40,7 +40,7 @@ struct ServerListView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.activeForwardings.map(\.id))
         .sheet(isPresented: $showAddSheet) {
             AddServerSheet(
-                isDuplicate: { u, h, p in vm.isDuplicateServer(user: u, host: h, port: p) }
+                isDuplicate: { user, host, port in vm.isDuplicateServer(user: user, host: host, port: port) }
             ) { server in
                 vm.addServer(server)
             }
@@ -48,8 +48,8 @@ struct ServerListView: View {
         .sheet(item: $editingServer) { server in
             AddServerSheet(
                 editing: server,
-                isDuplicate: { u, h, p in
-                    vm.isDuplicateServer(user: u, host: h, port: p, excluding: server.id)
+                isDuplicate: { user, host, port in
+                    vm.isDuplicateServer(user: user, host: host, port: port, excluding: server.id)
                 }
             ) { updated in
                 Task { await vm.updateServer(updated) }

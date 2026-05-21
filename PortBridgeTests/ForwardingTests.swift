@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class ForwardingTests: XCTestCase {
     private let serverId = UUID()

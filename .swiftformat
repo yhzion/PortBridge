@@ -1,0 +1,31 @@
+# SwiftFormat 설정 — PortBridge
+# 참고: https://github.com/nicklockwood/SwiftFormat/blob/main/Rules.md
+#
+# 도입 전략: 기계적/취향 무관한 규칙만 켜고, 스타일 호불호 있는 규칙은 비활성화.
+# 새 규칙을 활성화하려면 한 번에 하나씩 켜서 diff 확인 후 PR.
+
+--swiftversion 6.0
+--indent 4
+--maxwidth 140
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+--commas inline
+--trimwhitespace always
+--stripunusedargs closure-only
+--self remove
+--header ignore
+
+# 스타일 호불호 있는 규칙은 비활성화 (기존 코드 스타일 보존)
+--disable redundantReturn
+--disable andOperator
+--disable hoistPatternLet
+--disable numberFormatting
+--disable redundantNilInit
+--disable preferCountWhere
+--disable preferKeyPath
+--disable wrapMultilineStatementBraces
+--disable elseOnSameLine
+
+--exclude .build,.claude,Pods,DerivedData,PortBridge.xcodeproj

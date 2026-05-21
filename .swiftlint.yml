@@ -1,0 +1,72 @@
+# SwiftLint 설정 — PortBridge
+# 참고: https://realm.github.io/SwiftLint/rule-directory.html
+
+excluded:
+  - .build
+  - .claude
+  - DerivedData
+  - PortBridge.xcodeproj
+  - Pods
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - explicit_init
+  - first_where
+  - force_unwrapping
+  - last_where
+  - sorted_first_last
+
+# `unused_import` 는 swiftlint analyze 전용 → analyzer_rules 에 둠
+analyzer_rules:
+  - unused_import
+
+disabled_rules:
+  - todo                                      # TODO/FIXME 주석 허용
+  - trailing_whitespace                       # swiftformat 이 처리
+  - multiple_closures_with_trailing_closure   # SwiftUI 표준 패턴
+
+line_length:
+  warning: 140
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  excluded:
+    - id
+    - up
+    - to
+    - vm
+  min_length:
+    warning: 2
+    error: 1
+
+type_name:
+  min_length: 3
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - PB    # DesignTokens 네임스페이스 (의도된 짧은 이름)
+
+# 일부 SwiftUI View / Observable ViewModel 은 자연스럽게 250 줄 이상이 됨.
+# 300 줄 넘어가면 분할 검토 신호로 간주.
+type_body_length:
+  warning: 350
+  error: 500
+
+function_body_length:
+  warning: 100
+  error: 180
+
+file_length:
+  warning: 600
+  error: 1000
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+nesting:
+  type_level: 2

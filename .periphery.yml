@@ -1,0 +1,21 @@
+# Periphery 설정 — PortBridge
+# 참고: https://github.com/peripheryapp/periphery#configuration
+
+project: PortBridge.xcodeproj
+schemes:
+  - PortBridge
+targets:
+  - PortBridge
+
+# @objc 노출 심볼(셀렉터 기반 호출, NSStatusItem 액션 등)은 보존
+retain_objc_accessible: true
+retain_objc_annotated: true
+
+# SwiftUI #Preview 매크로/View 보존
+retain_swift_ui_previews: true
+
+# Codable 합성 conformance 멤버 보존
+retain_codable_properties: true
+
+# public/open 심볼은 외부 노출 가능성으로 제외하지 않음 (앱이라 public이 거의 없으므로 영향 미미)
+retain_public: false

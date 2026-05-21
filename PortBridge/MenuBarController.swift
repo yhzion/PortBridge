@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import Observation
+import SwiftUI
 
 /// 메뉴바 아이콘 + 클릭 분기 관리자.
 ///
@@ -77,8 +77,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         let rows = viewModel.favoriteRows
         if rows.isEmpty {
-            let hint = NSMenuItem(title: "메인 창에서 ★를 눌러 즐겨찾기를 추가하세요",
-                                  action: nil, keyEquivalent: "")
+            let hint = NSMenuItem(
+                title: "메인 창에서 ★를 눌러 즐겨찾기를 추가하세요",
+                action: nil,
+                keyEquivalent: ""
+            )
             hint.isEnabled = false
             menu.addItem(hint)
         } else {
@@ -99,9 +102,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let actives = viewModel.nonFavoriteActive
         if !actives.isEmpty {
             menu.addItem(.separator())
-            let h = NSMenuItem(title: "Active", action: nil, keyEquivalent: "")
-            h.isEnabled = false
-            menu.addItem(h)
+            let activeHeader = NSMenuItem(title: "Active", action: nil, keyEquivalent: "")
+            activeHeader.isEnabled = false
+            menu.addItem(activeHeader)
             for fw in actives {
                 let item = NSMenuItem(
                     title: ":\(fw.remotePort)",
@@ -122,38 +125,48 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             let title = "\(count) error\(count == 1 ? "" : "s")"
             let item = NSMenuItem(title: title, action: #selector(openMainWindow), keyEquivalent: "")
             item.target = self
-            item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
-                                 accessibilityDescription: nil)
+            item.image = NSImage(
+                systemSymbolName: "exclamationmark.triangle.fill",
+                accessibilityDescription: nil
+            )
             menu.addItem(item)
         }
 
         menu.addItem(.separator())
 
-        let openItem = NSMenuItem(title: "Open Main Window",
-                                  action: #selector(openMainWindow),
-                                  keyEquivalent: "o")
+        let openItem = NSMenuItem(
+            title: "Open Main Window",
+            action: #selector(openMainWindow),
+            keyEquivalent: "o"
+        )
         openItem.target = self
         menu.addItem(openItem)
 
-        let launchItem = NSMenuItem(title: "Launch at Login",
-                                    action: #selector(toggleLaunchAtLogin),
-                                    keyEquivalent: "")
+        let launchItem = NSMenuItem(
+            title: "Launch at Login",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
         launchItem.target = self
         launchItem.state = viewModel.preferences.launchAtLogin ? .on : .off
         menu.addItem(launchItem)
 
-        let dockItem = NSMenuItem(title: "Show in Dock",
-                                  action: #selector(toggleShowInDock),
-                                  keyEquivalent: "")
+        let dockItem = NSMenuItem(
+            title: "Show in Dock",
+            action: #selector(toggleShowInDock),
+            keyEquivalent: ""
+        )
         dockItem.target = self
         dockItem.state = viewModel.preferences.showInDock ? .on : .off
         menu.addItem(dockItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit PortBridge",
-                                  action: #selector(quit),
-                                  keyEquivalent: "q")
+        let quitItem = NSMenuItem(
+            title: "Quit PortBridge",
+            action: #selector(quit),
+            keyEquivalent: "q"
+        )
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -178,8 +191,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func toggleFavoriteRow(_ sender: NSMenuItem) {
         guard let row = sender.representedObject as? FavoriteRow else { return }
         Task {
-            let port = RemotePort(port: row.remotePort, address: "0.0.0.0",
-                                  processName: row.processName)
+            let port = RemotePort(
+                port: row.remotePort,
+                address: "0.0.0.0",
+                processName: row.processName
+            )
             await viewModel.toggleForwarding(serverId: row.id.serverId, for: port)
         }
     }

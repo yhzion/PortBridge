@@ -21,7 +21,9 @@ final class ServerSectionViewModel: Identifiable {
 
     private let scanner: PortScanner
 
-    var id: UUID { server.id }
+    var id: UUID {
+        server.id
+    }
 
     init(server: Server, scanner: PortScanner = PortScanner(runner: ProcessCommandRunner())) {
         self.server = server
@@ -39,10 +41,9 @@ final class ServerSectionViewModel: Identifiable {
 
     func scan() async {
         if case .scanning = scanState { return }
-        if case .offline(true) = scanState { return }   // 이미 silent retry 중
+        if case .offline(true) = scanState { return } // 이미 silent retry 중
 
-        let wasOffline: Bool
-        if case .offline = scanState { wasOffline = true } else { wasOffline = false }
+        let wasOffline = if case .offline = scanState { true } else { false }
 
         scanState = wasOffline ? .offline(isRetrying: true) : .scanning
 

@@ -5,7 +5,9 @@ nonisolated struct RemotePort: Identifiable, Hashable {
     let address: String
     let processName: String?
 
-    var id: String { "\(address):\(port)" }
+    var id: String {
+        "\(address):\(port)"
+    }
 
     var displayLine: String {
         let base = ":\(port) · \(scopeLabel)"

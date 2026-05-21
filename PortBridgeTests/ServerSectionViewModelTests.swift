@@ -1,6 +1,6 @@
 // PortBridgeTests/ServerSectionViewModelTests.swift
-import XCTest
 @testable import PortBridge
+import XCTest
 
 @MainActor
 final class ServerSectionViewModelTests: XCTestCase {
@@ -116,8 +116,8 @@ final class ServerSectionViewModelTests: XCTestCase {
         XCTAssertEqual(vm.scanState, .toolMissing)
     }
 
-    // macOS ssh는 도달 불가 호스트에 대해 "Operation timed out"을 출력함
-    // (Linux는 "Connection timed out"). 두 표기 모두 .offline(false)로 분류되어야 함.
+    /// macOS ssh는 도달 불가 호스트에 대해 "Operation timed out"을 출력함
+    /// (Linux는 "Connection timed out"). 두 표기 모두 .offline(false)로 분류되어야 함.
     @MainActor
     func test_scan_operationTimedOut_setsOffline() async {
         let mock = MockCommandRunner()
@@ -142,7 +142,7 @@ final class ServerSectionViewModelTests: XCTestCase {
         let mock = MockCommandRunner()
         await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "No route to host"),
-            CommandResult(exitCode: 255, stdout: "", stderr: "No route to host"),
+            CommandResult(exitCode: 255, stdout: "", stderr: "No route to host")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()

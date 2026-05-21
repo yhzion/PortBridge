@@ -1,0 +1,5 @@
+# UI 테스트도 동일한 관대한 규칙
+disabled_rules:
+  - identifier_name
+  - force_unwrapping
+  - function_body_length

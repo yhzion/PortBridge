@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 final class ScanOutputParserTests: XCTestCase {
     private func fixtureURL(_ name: String) -> URL {

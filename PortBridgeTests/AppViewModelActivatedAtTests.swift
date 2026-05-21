@@ -1,9 +1,8 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 @MainActor
 final class AppViewModelActivatedAtTests: XCTestCase {
-
     func test_forwarding_activatedAt_defaultsToNil() {
         let fw = Forwarding(
             serverId: UUID(),

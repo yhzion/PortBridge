@@ -58,7 +58,7 @@ enum AppSingleInstance {
         guard activationObserver == nil else { return }
 
         activationObserver = DistributedNotificationCenter.default().addObserver(
-            forName: Self.activationNotification,
+            forName: activationNotification,
             object: nil,
             queue: .main
         ) { _ in
@@ -94,7 +94,7 @@ enum AppSingleInstance {
 
     private static func requestExistingInstanceActivation() {
         DistributedNotificationCenter.default().post(
-            name: Self.activationNotification,
+            name: activationNotification,
             object: nil,
             userInfo: nil
         )

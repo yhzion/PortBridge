@@ -1,0 +1,8 @@
+# 테스트 코드는 더 관대한 규칙 적용
+# 짧은 변수 이름(s = server, p = port 등)이 흔한 패턴이라 identifier_name 비활성화
+
+disabled_rules:
+  - identifier_name
+  - force_unwrapping  # 테스트 setup 에서 의도적 force unwrap 사용
+  - force_try         # 테스트 fixture 로딩에서 try! 허용
+  - function_body_length  # 테스트 함수가 길어질 수 있음

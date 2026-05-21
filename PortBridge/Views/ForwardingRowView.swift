@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct ForwardingRowView: View {
     let port: RemotePort
@@ -20,8 +20,8 @@ struct ForwardingRowView: View {
 
     private var statusSymbol: (name: String, color: Color) {
         switch forwarding?.state {
-        case .active:        return ("circle.fill", .green)
-        case .error:         return ("exclamationmark.triangle.fill", .red)
+        case .active: return ("circle.fill", .green)
+        case .error: return ("exclamationmark.triangle.fill", .red)
         case .starting, .idle, .none: return ("circle", .secondary)
         }
     }
@@ -163,8 +163,13 @@ private struct OpenInBrowserButton: View {
     @State private var isHovering = false
     @State private var isPressed = false
 
-    private var url: URL? { URL(string: "http://localhost:\(localPort)") }
-    private var helpText: String { "기본 브라우저로 http://localhost:\(localPort) 열기" }
+    private var url: URL? {
+        URL(string: "http://localhost:\(localPort)")
+    }
+
+    private var helpText: String {
+        "기본 브라우저로 http://localhost:\(localPort) 열기"
+    }
 
     var body: some View {
         Button {

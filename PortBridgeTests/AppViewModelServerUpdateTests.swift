@@ -1,5 +1,5 @@
-import XCTest
 @testable import PortBridge
+import XCTest
 
 @MainActor
 final class AppViewModelServerUpdateTests: XCTestCase {

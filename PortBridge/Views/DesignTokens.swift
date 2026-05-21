@@ -1,6 +1,6 @@
 // PortBridge/Views/DesignTokens.swift
-import SwiftUI
 import AppKit
+import SwiftUI
 
 extension Color {
     /// PortBridge 디자인 토큰.
@@ -16,14 +16,15 @@ extension Color {
         /// (다크 #6E6E76 vs #1A1A1A ≈ 3.33:1 / 라이트 #8E8E93 vs #FFFFFF ≈ 3.26:1).
         /// 라이트는 Apple systemGray와 동일 — textBackgroundColor(흰색) 위에서 3:1 충족.
         static let inputBorder = dynamic(
-            dark:  NSColor(srgbRed: 110/255, green: 110/255, blue: 118/255, alpha: 1),
-            light: NSColor(srgbRed: 142/255, green: 142/255, blue: 147/255, alpha: 1)
+            dark: NSColor(srgbRed: 110 / 255, green: 110 / 255, blue: 118 / 255, alpha: 1),
+            light: NSColor(srgbRed: 142 / 255, green: 142 / 255, blue: 147 / 255, alpha: 1)
         )
 
         /// 입력 필드 포커스 외곽선 — 사용자 강조 색상에 자동 동기화.
         static let inputBorderFocused = Color.accentColor
 
         // MARK: - Accent variants
+
         //
         // accent 위에 얹는 미묘한 톤들 — opacity 곱 한 줄을 시맨틱 이름으로 노출.
 
