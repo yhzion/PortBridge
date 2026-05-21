@@ -38,13 +38,23 @@ final class ServerSectionViewModel: Identifiable {
     }
 
     func scan() async {
-        guard scanState != .scanning else { return }
-        scanState = .scanning
+        if case .scanning = scanState { return }
+        if case .offline(true) = scanState { return }   // 이미 silent retry 중
+
+        let wasOffline: Bool
+        if case .offline = scanState { wasOffline = true } else { wasOffline = false }
+
+        scanState = wasOffline ? .offline(isRetrying: true) : .scanning
+
         do {
             let loaded = try await scanner.scan(server: server)
             scanState = .loaded(loaded)
         } catch PortBridgeError.sshAuthFailed {
             scanState = .authFailed(copyCommand: "ssh-copy-id \(server.sshTarget)")
+        } catch PortBridgeError.serverUnreachable {
+            scanState = .offline(isRetrying: false)
+        } catch PortBridgeError.remoteToolsMissing {
+            scanState = .toolMissing
         } catch let error as PortBridgeError {
             scanState = .error(error.errorDescription ?? error.localizedDescription)
         } catch {
