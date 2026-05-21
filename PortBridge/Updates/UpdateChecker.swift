@@ -64,7 +64,8 @@ final class UpdateChecker {
         await checkNow()
     }
 
-    func checkNow() async {
+    func checkNow(manual: Bool = false) async {
+        log.info("checkNow invoked (manual: \(manual, privacy: .public))")
         phase = .checking
         do {
             let info = try await fetcher.fetchLatest()
@@ -75,6 +76,9 @@ final class UpdateChecker {
             guard let current = currentVersion, let remote = info.version else {
                 log.warning("Skipping comparison — currentVersion or remote.version nil")
                 phase = .upToDate(checkedAt: timestamp)
+                if manual {
+                    await notifier?.notifyUpToDate(version: currentVersion?.string ?? "unknown")
+                }
                 return
             }
             let isNewer = remote > current
@@ -90,10 +94,30 @@ final class UpdateChecker {
                 phase = .available(info)
             } else {
                 phase = .upToDate(checkedAt: timestamp)
+                if manual {
+                    await notifier?.notifyUpToDate(version: current.string)
+                }
             }
         } catch {
             log.error("Update check failed: \(String(describing: error), privacy: .public)")
             phase = .failed(checkedAt: now())
+            if manual {
+                await notifier?.notifyFailed(reason: humanReadable(error))
+            }
+        }
+    }
+
+    private func humanReadable(_ error: Error) -> String {
+        guard let updateError = error as? UpdateCheckError else {
+            return "Unexpected error: \(error.localizedDescription)"
+        }
+        switch updateError {
+        case .network: return "Network unavailable. Check your connection."
+        case .httpStatus(404): return "No releases found on GitHub yet."
+        case .httpStatus(403): return "GitHub rate limit reached. Try again in an hour."
+        case .httpStatus(let code): return "Server returned HTTP \(code)."
+        case .invalidResponse: return "Unexpected response from GitHub."
+        case .decoding: return "Couldn't parse the release information."
         }
     }
 
