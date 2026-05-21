@@ -16,20 +16,18 @@ final class UpdateChecker {
     var phase: Phase = .idle
     private(set) var lastCheckedAt: Date?
     private(set) var skippedVersion: SemanticVersion?
-    private(set) var lastNotifiedVersion: SemanticVersion?
 
     @ObservationIgnored private let fetcher: ReleaseFetcher
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private let currentVersion: SemanticVersion?
-    @ObservationIgnored private let notifier: UpdateNotifying?
+    @ObservationIgnored private let presenter: UpdatePresenting?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let log = Logger(subsystem: "PortBridge", category: "UpdateChecker")
 
     private enum Keys {
         static let lastCheckedAt = "PortBridge.UpdateCheck.LastCheckedAt"
         static let skippedVersion = "PortBridge.UpdateCheck.SkippedVersion"
-        static let lastNotifiedVersion = "PortBridge.UpdateCheck.LastNotifiedVersion"
     }
 
     var availableUpdate: ReleaseInfo? {
@@ -42,19 +40,17 @@ final class UpdateChecker {
         defaults: UserDefaults,
         preferences: AppPreferences,
         currentVersion: SemanticVersion?,
-        notifier: UpdateNotifying? = nil,
+        presenter: UpdatePresenting? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.fetcher = fetcher
         self.defaults = defaults
         self.preferences = preferences
         self.currentVersion = currentVersion
-        self.notifier = notifier
+        self.presenter = presenter
         self.now = now
         lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
         skippedVersion = defaults.string(forKey: Keys.skippedVersion)
-            .flatMap(SemanticVersion.init(string:))
-        lastNotifiedVersion = defaults.string(forKey: Keys.lastNotifiedVersion)
             .flatMap(SemanticVersion.init(string:))
     }
 
@@ -66,6 +62,7 @@ final class UpdateChecker {
 
     func checkNow(manual: Bool = false) async {
         log.info("checkNow invoked (manual: \(manual, privacy: .public))")
+        let oldPhase = phase
         phase = .checking
         do {
             let info = try await fetcher.fetchLatest()
@@ -77,33 +74,50 @@ final class UpdateChecker {
                 log.warning("Skipping comparison — currentVersion or remote.version nil")
                 phase = .upToDate(checkedAt: timestamp)
                 if manual {
-                    await notifier?.notifyUpToDate(version: currentVersion?.string ?? "unknown")
+                    await presenter?.presentUpToDate(version: currentVersion?.string ?? "unknown")
                 }
                 return
             }
             let isNewer = remote > current
             let isSkipped = (skippedVersion == remote)
             if isNewer && !isSkipped {
-                if lastNotifiedVersion != remote {
-                    lastNotifiedVersion = remote
-                    defaults.set(remote.string, forKey: Keys.lastNotifiedVersion)
-                    if let notifier {
-                        await notifier.notify(release: info)
-                    }
-                }
                 phase = .available(info)
+                let alreadyShowedSameVersion: Bool = {
+                    if case .available(let prev) = oldPhase, prev.version == info.version {
+                        return true
+                    }
+                    return false
+                }()
+                if manual || !alreadyShowedSameVersion {
+                    await handleAvailable(info)
+                }
             } else {
                 phase = .upToDate(checkedAt: timestamp)
                 if manual {
-                    await notifier?.notifyUpToDate(version: current.string)
+                    await presenter?.presentUpToDate(version: current.string)
                 }
             }
         } catch {
             log.error("Update check failed: \(String(describing: error), privacy: .public)")
             phase = .failed(checkedAt: now())
             if manual {
-                await notifier?.notifyFailed(reason: humanReadable(error))
+                await presenter?.presentFailed(reason: humanReadable(error))
             }
+        }
+    }
+
+    func skipCurrent() {
+        guard case .available(let info) = phase, let v = info.version else { return }
+        skippedVersion = v
+        defaults.set(v.string, forKey: Keys.skippedVersion)
+        phase = .upToDate(checkedAt: now())
+    }
+
+    private func handleAvailable(_ info: ReleaseInfo) async {
+        guard let presenter else { return }
+        let choice = await presenter.presentAvailable(release: info)
+        if choice == .skip {
+            skipCurrent()
         }
     }
 
@@ -119,12 +133,5 @@ final class UpdateChecker {
         case .invalidResponse: return "Unexpected response from GitHub."
         case .decoding: return "Couldn't parse the release information."
         }
-    }
-
-    func skipCurrent() {
-        guard case .available(let info) = phase, let v = info.version else { return }
-        skippedVersion = v
-        defaults.set(v.string, forKey: Keys.skippedVersion)
-        phase = .upToDate(checkedAt: now())
     }
 }
