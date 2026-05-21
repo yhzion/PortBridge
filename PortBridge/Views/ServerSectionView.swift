@@ -158,8 +158,31 @@ struct ServerSectionView: View {
     }
 }
 
+enum ServerStatusDot: Equatable {
+    case none
+    case offline(pulse: Bool)
+    case warning   // 노랑 — toolMissing / authFailed
+    case online    // 녹색
+
+    var fill: Color? {
+        switch self {
+        case .none: return nil
+        case .offline: return .secondary.opacity(0.5)
+        case .warning: return .orange
+        case .online: return .green
+        }
+    }
+
+    var pulses: Bool {
+        if case .offline(true) = self { return true }
+        return false
+    }
+}
+
 private struct ServerMonogram: View {
     let server: Server
+    var status: ServerStatusDot = .none
+    var dimmed: Bool = false
 
     private var initial: String {
         let source = server.name ?? server.host
@@ -167,9 +190,6 @@ private struct ServerMonogram: View {
         return String(first).uppercased()
     }
 
-    /// Deterministic hue from host via FNV-1a 32-bit. Swift's `String.hashValue` is
-    /// randomized per process, and a plain byte sum collapses anagrams like
-    /// `prod-01`/`prod-10` to the same color.
     private var hue: Double {
         var hash: UInt32 = 0x811c9dc5
         for byte in server.host.utf8 {
@@ -185,16 +205,48 @@ private struct ServerMonogram: View {
             saturation: Color.PB.Monogram.saturation,
             brightness: Color.PB.Monogram.brightness
         )
-        ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(tint.opacity(Color.PB.Monogram.fillOpacity))
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(tint.opacity(Color.PB.Monogram.strokeOpacity), lineWidth: 0.5)
-            Text(initial)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(tint)
+        ZStack(alignment: .bottomTrailing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(tint.opacity(Color.PB.Monogram.fillOpacity))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(tint.opacity(Color.PB.Monogram.strokeOpacity), lineWidth: 0.5)
+                Text(initial)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 24, height: 24)
+            .opacity(dimmed ? 0.55 : 1.0)
+
+            if let fill = status.fill {
+                StatusDot(fill: fill, pulses: status.pulses)
+                    .offset(x: 2, y: 2)
+            }
         }
         .frame(width: 24, height: 24)
+    }
+}
+
+private struct StatusDot: View {
+    let fill: Color
+    let pulses: Bool
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(fill)
+            .frame(width: 8, height: 8)
+            .overlay(
+                Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 1.5)
+            )
+            .opacity(pulses ? (pulse ? 1.0 : 0.4) : 1.0)
+            .scaleEffect(pulses ? (pulse ? 1.0 : 0.9) : 1.0)
+            .onAppear {
+                guard pulses else { return }
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
     }
 }
 
