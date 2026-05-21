@@ -52,6 +52,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             await viewModel.startFavoritesIfEnabled()
         }
+
+        // UI 테스트가 메인 윈도우 표시를 명시 요청한 경우 (LaunchSmokeTests 참조).
+        // MenuBarExtra 우선 앱이라 WindowGroup의 자동 표시가 환경에 따라 불확실하므로,
+        // 테스트 결정성을 위해 첫 윈도우를 강제로 전면에 띄운다.
+        if Self.shouldOpenMainWindowOnLaunch {
+            Task { @MainActor in
+                // SwiftUI scene이 WindowGroup 윈도우를 생성할 시간을 짧게 확보.
+                try? await Task.sleep(for: .milliseconds(200))
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -68,5 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static var isRunningUnderTest: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || ProcessInfo.processInfo.arguments.contains("-UITesting")
+    }
+
+    private static var shouldOpenMainWindowOnLaunch: Bool {
+        ProcessInfo.processInfo.arguments.contains("-OpenMainWindowOnLaunch")
     }
 }
