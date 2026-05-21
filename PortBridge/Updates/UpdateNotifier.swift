@@ -5,6 +5,8 @@ import UserNotifications
 @MainActor
 protocol UpdateNotifying: Sendable {
     func notify(release: ReleaseInfo) async
+    func notifyUpToDate(version: String) async
+    func notifyFailed(reason: String) async
 }
 
 @MainActor
@@ -17,6 +19,30 @@ struct UpdateNotifier: UpdateNotifying {
     }
 
     func notify(release: ReleaseInfo) async {
+        await deliver(
+            identifier: "PortBridge.UpdateAvailable.\(release.tagName)",
+            title: "PortBridge update available",
+            body: "\(release.tagName) is ready to download."
+        )
+    }
+
+    func notifyUpToDate(version: String) async {
+        await deliver(
+            identifier: "PortBridge.UpdateCheck.UpToDate",
+            title: "PortBridge is up to date",
+            body: "You're on the latest version (\(version))."
+        )
+    }
+
+    func notifyFailed(reason: String) async {
+        await deliver(
+            identifier: "PortBridge.UpdateCheck.Failed",
+            title: "Couldn't check for updates",
+            body: reason
+        )
+    }
+
+    private func deliver(identifier: String, title: String, body: String) async {
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .sound])
             guard granted else {
@@ -24,11 +50,11 @@ struct UpdateNotifier: UpdateNotifying {
                 return
             }
             let content = UNMutableNotificationContent()
-            content.title = "PortBridge update available"
-            content.body = "\(release.tagName) is ready to download."
+            content.title = title
+            content.body = body
             content.sound = .default
             let request = UNNotificationRequest(
-                identifier: "PortBridge.UpdateAvailable.\(release.tagName)",
+                identifier: identifier,
                 content: content,
                 trigger: nil
             )

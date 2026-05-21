@@ -207,6 +207,50 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertEqual(notifier.notifyCalls.count, 1)
     }
 
+    func test_manualCheck_notifiesUpToDate_whenAlreadyLatest() async {
+        let notifier = MockUpdateNotifier()
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.2.0"),
+            notifier: notifier
+        )
+        await checker.checkNow(manual: true)
+        XCTAssertEqual(notifier.upToDateCalls, ["0.2.0"])
+        XCTAssertTrue(notifier.notifyCalls.isEmpty)
+        XCTAssertTrue(notifier.failedCalls.isEmpty)
+    }
+
+    func test_autoCheck_doesNotNotifyOnUpToDate() async {
+        let notifier = MockUpdateNotifier()
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.2.0"),
+            notifier: notifier
+        )
+        await checker.checkNow()
+        XCTAssertTrue(notifier.upToDateCalls.isEmpty)
+    }
+
+    func test_manualCheck_notifiesFailed_onNetworkError() async {
+        let notifier = MockUpdateNotifier()
+        let fetcher = MockReleaseFetcher(
+            result: .failure(UpdateCheckError.network(URLError(.notConnectedToInternet)))
+        )
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.1.0"),
+            notifier: notifier
+        )
+        await checker.checkNow(manual: true)
+        XCTAssertEqual(notifier.failedCalls.count, 1)
+        XCTAssertTrue(
+            notifier.failedCalls[0].contains("Network"),
+            "Expected human-readable network reason, got: \(notifier.failedCalls[0])"
+        )
+    }
+
     func test_notifiesAgainForHigherVersion() async {
         let notifier = MockUpdateNotifier()
         let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))

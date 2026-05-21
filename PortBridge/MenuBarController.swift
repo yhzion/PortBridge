@@ -20,6 +20,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var badgeLayer: CALayer?
 
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
         super.init()
@@ -106,6 +112,19 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             submenu.addItem(notes)
 
             item.submenu = submenu
+            menu.addItem(item)
+            menu.addItem(.separator())
+        } else if case .upToDate(let at) = viewModel.updates.phase {
+            let item = NSMenuItem(
+                title: "Up to date · \(Self.relativeFormatter.localizedString(for: at, relativeTo: Date()))",
+                action: nil,
+                keyEquivalent: ""
+            )
+            item.isEnabled = false
+            item.image = NSImage(
+                systemSymbolName: "checkmark.circle",
+                accessibilityDescription: nil
+            )
             menu.addItem(item)
             menu.addItem(.separator())
         }
@@ -313,7 +332,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func checkForUpdatesNow() {
         Task { @MainActor in
-            await viewModel.updates.checkNow()
+            await viewModel.updates.checkNow(manual: true)
         }
     }
 
