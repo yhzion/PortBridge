@@ -15,7 +15,7 @@
 ## 사전 상태
 
 - **워크트리**: `worktree-wcag-input-border` (base: `origin/main` @ `6f790bc`, Menu Bar Extras 머지 포함)
-- **선행 main 의존성**: `437cbfd feat(view): add leading star button to ForwardingRowView` — `ForwardingRowView`에 `isFavorite`·`onFavoriteToggle` 필드와 leading star Button(첫 자식)이 추가됨. **본 plan은 이 star Button을 보존하면서 동작하도록 "본문 영역만 outer Button으로 감싸는" 옵션 A 패턴을 적용한다**
+- **선행 main 의존성**: `437cbfd feat(view): add leading star button to ForwardingRowView` — `ForwardingRowView`에 `isFavorite`·`onFavoriteToggle` 필드와 leading star Button(첫 자식)이 추가됨. **본 plan은 이 star Button을 보존하면서 동작하도록 옵션 A2(star + 본문 Button + OpenInBrowserButton + error icon을 모두 outer HStack의 형제로 분리) 패턴을 적용한다 — nested Button 완전 제거**
 - **선행 미커밋 변경**: 워킹트리에 다음 변경이 staged 안 됨 — Task 0에서 처리
   - `PortBridge/Views/DesignTokens.swift` (WCAG inputBorder 라이트 톤 강화, 리뷰 항목 1번)
   - `PortBridge/ContentView.swift` (PortConflictSheet 입력 검증, 리뷰 항목 2번)
@@ -120,7 +120,9 @@ Expected: `** BUILD SUCCEEDED **`
 Run: `sed -n '59,122p' PortBridge/Views/ForwardingRowView.swift`
 Expected: leading star Button, statusIndicator, port column, VStack, Spacer, OpenInBrowserButton (hover gated), error icon — 모두 `HStack` 단일 자식. 외부에 `.onTapGesture { onToggle() }`와 `.accessibilityElement(.combine)`.
 
-- [ ] **Step 1.2: body 전체를 옵션 A 구조로 재작성**
+- [ ] **Step 1.2: body 전체를 옵션 A2 구조로 재작성**
+
+A2 일관성: star Button과 더불어 **OpenInBrowserButton·error info icon도 본문 Button "바깥"의 형제**로 둔다. 본문 Button 안에는 핵심 정보(statusIndicator·port·이름)만, Spacer까지 포함해 hit region을 행 가운데 끝까지 확장한다.
 
 `var body: some View { ... }` 블록 전체를 다음으로 교체:
 
@@ -167,16 +169,6 @@ var body: some View {
                 }
 
                 Spacer(minLength: 4)
-
-                if isActive, let local = forwarding?.localPort, isRowHovering {
-                    OpenInBrowserButton(localPort: local)
-                }
-
-                if case .error(let msg) = forwarding?.state {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                        .help(String(msg))
-                }
             }
             .contentShape(Rectangle())
         }
@@ -187,20 +179,31 @@ var body: some View {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
         .accessibilityAddTraits(.isButton)
+
+        if isActive, let local = forwarding?.localPort, isRowHovering {
+            OpenInBrowserButton(localPort: local)
+        }
+
+        if case .error(let msg) = forwarding?.state {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+                .help(String(msg))
+        }
     }
     .padding(.vertical, 4)
     .onHover { isRowHovering = $0 }
 }
 ```
 
-변경 요점:
-- **leading star Button은 그대로 보존** — outer HStack의 첫 자식, 독립 Tab stop
-- **본문 영역만 두 번째 `Button(action: onToggle)`로 감쌈** — chevron 충돌 방지
-- 기존 `.onTapGesture { ... onToggle() }` 제거 — outer 본문 Button action으로 대체
+변경 요점 (옵션 A2):
+- **outer HStack의 형제 네 개**: star Button / 본문 Button / OpenInBrowserButton(active) / error icon(error)
+- **본문 Button 안**: statusIndicator + port + name + Spacer만 — nested Button 없음, hit testing 결정적
+- Spacer를 본문 Button 안에 포함 → 본문 Button hit region이 우측 OpenInBrowserButton 직전까지 확장 (행 가운데 빈 공간 클릭도 toggle)
+- 기존 `.onTapGesture { ... onToggle() }` 제거 — 본문 Button action으로 대체
 - `.disabled(isStarting)`이 기존 `guard !isStarting else { return }` 역할 대신함
-- `.padding(.vertical, 4)`·`.onHover`는 outer HStack 레벨로 이동
-- `.help` / `.accessibilityElement` / `.accessibilityLabel` / `.accessibilityHint` / `.accessibilityAddTraits` 묶음은 본문 Button에 부착 (Task 3에서 `.contain`으로 바꾸고 `.isButton` 제거)
-- `OpenInBrowserButton` 노출 조건은 이 Task에서는 **그대로** 유지 (Task 2에서 변경)
+- `.padding(.vertical, 4)`·`.onHover`는 outer HStack 레벨
+- `.help` / `.accessibilityElement(.combine)` / `.accessibilityLabel` / `.accessibilityHint` / `.accessibilityAddTraits(.isButton)`는 본문 Button에 부착 (Task 3에서 `.isButton`만 제거; `.combine`은 유지)
+- `OpenInBrowserButton`의 hover 조건은 이 Task에서는 **그대로** 유지 (Task 2에서 변경)
 
 - [ ] **Step 1.3: 빌드 확인**
 
@@ -220,13 +223,18 @@ Expected: `** BUILD SUCCEEDED **`
 ```bash
 git add PortBridge/Views/ForwardingRowView.swift
 git commit -m "$(cat <<'EOF'
-refactor(forwarding-row): wrap body region in Button (keep star)
+refactor(forwarding-row): split row into sibling buttons (option A2)
 
-Split the row into two sibling Buttons: the existing star Button
-remains a leading Tab stop, and a new Button(action: onToggle)
-wraps the body region (status, port, name, browser). Replaces
-the row-wide .onTapGesture with native Button handling and adds
-.disabled(isStarting) in place of the manual guard.
+Restructure the row into HStack siblings:
+  - star Button (leading)
+  - body Button(action: onToggle) wrapping status/port/name/Spacer
+  - OpenInBrowserButton (active rows only)
+  - info.circle icon (error rows only)
+
+Replaces the row-wide .onTapGesture with native Button handling and
+adds .disabled(isStarting) in place of the manual guard. Nested
+buttons are eliminated, so hit testing and Tab navigation become
+predictable across mouse, keyboard, and VoiceOver paths.
 
 No visual or VoiceOver tree change yet; accessibility refinements
 follow in subsequent commits.
@@ -247,7 +255,7 @@ EOF
 
 - [ ] **Step 2.1: 조건문에서 isRowHovering 제거**
 
-`ForwardingRowView.swift` body 안의 다음 라인을 찾아 수정:
+Task 1.2 결과로 OpenInBrowserButton 조건문은 본문 Button **바깥의 outer HStack 형제** 위치에 있다. 그 조건문을 수정:
 
 변경 전:
 ```swift
@@ -263,7 +271,7 @@ if isActive, let local = forwarding?.localPort {
 }
 ```
 
-`isRowHovering` state는 그대로 유지(향후 행 hover 배경 효과에 활용 여지). `.onHover { isRowHovering = $0 }`도 유지.
+`isRowHovering` state는 그대로 유지(향후 행 hover 배경 효과에 활용 여지). outer HStack의 `.onHover { isRowHovering = $0 }`도 유지.
 
 - [ ] **Step 2.2: 빌드 확인**
 
@@ -295,36 +303,36 @@ EOF
 
 ---
 
-## Task 3: ForwardingRowView 본문 Button 접근성 트리 재정리
+## Task 3: ForwardingRowView 본문 Button 접근성 트리 마무리 (A2)
 
-**목적:** 본문 Button의 자식 OpenInBrowserButton이 VoiceOver에 별도 노드로 노출되도록 `.combine` → `.contain`. 본문이 SwiftUI Button이므로 `.isButton` 트레잇은 자동 부여 — 명시 제거.
+**목적:** A2에서 OpenInBrowserButton·error icon이 이미 본문 Button 바깥 형제이므로 트리 분리는 자동 완성. 남은 작업은 본문 Button이 SwiftUI Button이라 자동 부여되는 `.isButton` 트레잇의 명시 중복 제거.
 
 **Files:**
 - Modify: `PortBridge/Views/ForwardingRowView.swift` — 본문 `Button(action: onToggle)`의 accessibility modifier 묶음
 
-- [ ] **Step 3.1: 본문 Button의 accessibility modifier 교체**
+- [ ] **Step 3.1: 본문 Button에서 .isButton 트레잇 제거**
 
-다음 modifier 묶음을 (Task 1.2에서 본문 Button에 부착해둔 묶음):
+Task 1.2에서 본문 Button에 부착한 modifier 묶음 중 마지막 한 줄만 제거:
 
 ```swift
 .accessibilityElement(children: .combine)
 .accessibilityLabel(accessibilityLabel)
 .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
-.accessibilityAddTraits(.isButton)
+.accessibilityAddTraits(.isButton)   // ← 이 줄 삭제
 ```
 
-다음으로 교체:
+→
 
 ```swift
-.accessibilityElement(children: .contain)
+.accessibilityElement(children: .combine)
 .accessibilityLabel(accessibilityLabel)  // 기존 private computed property (`accessibilityLabel`, 현 코드 :140-146) 그대로 사용
 .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
 ```
 
-변경 요점:
-- `.combine` → `.contain`: 자식 OpenInBrowserButton이 별도 노드로 노출됨
-- `.accessibilityAddTraits(.isButton)` 제거: 외부 본문 Button이 자동 부여
-- star Button의 accessibility(별도 label·help)는 영향 없음 — outer HStack의 형제이므로 독립 노드
+변경 요점 (A2 기준):
+- `.combine` **유지** — A2에서는 자식이 statusIndicator·port·name VStack만 남아 한 라벨로 묶이는 게 자연스러움. OpenInBrowserButton은 형제로 이미 분리됨
+- `.accessibilityAddTraits(.isButton)` **제거** — 본문 SwiftUI Button이 자동 부여, 명시는 중복
+- star Button·OpenInBrowserButton·error icon은 outer HStack의 별개 형제 노드이므로 본문 Button 트리 조정과 무관
 
 - [ ] **Step 3.2: 빌드 확인**
 
@@ -350,12 +358,13 @@ VoiceOver ⌘F5 OFF (키보드만):
 ```bash
 git add PortBridge/Views/ForwardingRowView.swift
 git commit -m "$(cat <<'EOF'
-feat(a11y): expose OpenInBrowserButton as separate VO node
+feat(a11y): drop redundant .isButton trait on body button
 
-Switch row accessibilityElement from .combine to .contain so the
-browser button is reachable via VoiceOver rotor and Tab key.
-Drop the now-redundant .isButton trait — the outer Button supplies
-it automatically.
+In option A2, OpenInBrowserButton and the error icon are already
+HStack siblings of the body Button, so they expose themselves to
+VoiceOver and Tab without needing .contain on the body. The body's
+SwiftUI Button supplies the .isButton trait automatically — strip
+the explicit accessibilityAddTraits so we don't carry stale state.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
