@@ -52,7 +52,6 @@ struct GitHubReleaseFetcher: ReleaseFetcher {
         }
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .iso8601
         do {
             return try decoder.decode(ReleaseInfo.self, from: data)

@@ -9,7 +9,6 @@ final class ReleaseInfoDecodingTests: XCTestCase {
 
         let data = try Data(contentsOf: XCTUnwrap(url))
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .iso8601
 
         let info = try decoder.decode(ReleaseInfo.self, from: data)
