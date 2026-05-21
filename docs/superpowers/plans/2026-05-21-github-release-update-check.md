@@ -769,13 +769,13 @@ git commit -m "feat(updates): add UpdateChecker with skip + 24h debounce"
 
 - [ ] **Step 1: Modify** `PortBridge/ViewModels/AppViewModel.swift`
 
-After the `let preferences: AppPreferences` line (around line 20), add:
+After the `let preferences: AppPreferences` line (around line 27 post-swiftformat), add:
 
 ```swift
     let updates: UpdateChecker
 ```
 
-In the `init(...)` signature (around lines 70-76), add an optional parameter:
+In the `init(...)` signature (around lines 76-82 post-swiftformat), add an optional parameter:
 
 ```swift
     init(
@@ -1006,15 +1006,15 @@ git commit -m "feat(menu): add auto-check toggle and manual Check Now"
     }
 ```
 
-- [ ] **Step 3: Modify** `observeIconState()` — extend the tracked reads and the onChange action:
+- [ ] **Step 3: Modify** `observeIconState()` — extend the tracked reads and the onChange action.
 
-Replace the entire `observeIconState()` method with:
+The current (post-swiftlint) shape already uses `[weak self]` in the `withObservationTracking` closure. Replace the entire `observeIconState()` method with:
 
 ```swift
     private func observeIconState() {
-        withObservationTracking {
-            _ = viewModel.isAnyFavoriteActive
-            _ = viewModel.updates.availableUpdate
+        withObservationTracking { [weak self] in
+            _ = self?.viewModel.isAnyFavoriteActive
+            _ = self?.viewModel.updates.availableUpdate
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
