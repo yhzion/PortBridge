@@ -82,6 +82,13 @@ final class AppViewModel {
             }
     }
 
+    // MARK: - Lookup
+
+    /// View 렌더링 시점에 사용. `Forwarding`이 서버 이름을 복제하지 않고 SSoT(ServerStore)에서 조회.
+    func serverDisplayName(for serverId: UUID) -> String? {
+        store.servers.first { $0.id == serverId }?.displayName
+    }
+
     // MARK: - Server CRUD
 
     func addServer(_ server: Server) {
@@ -177,7 +184,6 @@ final class AppViewModel {
         let placeholder = Forwarding(
             id: placeholderID,
             serverId: server.id,
-            serverDisplayName: server.displayName,
             remotePort: remotePort,
             localPort: localPort,
             state: .starting
@@ -203,7 +209,6 @@ final class AppViewModel {
             activatedAt[placeholderID] = nil
             pendingPortConflict = PortConflict(
                 serverId: server.id,
-                serverDisplayName: server.displayName,
                 remotePort: remotePort,
                 attemptedLocal: localPort
             )
@@ -227,7 +232,6 @@ struct ErrorToast: Identifiable, Equatable {
 struct PortConflict: Identifiable, Equatable {
     let id = UUID()
     let serverId: UUID
-    let serverDisplayName: String
     let remotePort: Int
     let attemptedLocal: Int
 }

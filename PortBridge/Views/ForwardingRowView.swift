@@ -4,6 +4,7 @@ import AppKit
 struct ForwardingRowView: View {
     let port: RemotePort
     let forwarding: Forwarding?
+    let serverDisplayName: String?
     let onToggle: () -> Void
 
     private var isStarting: Bool {
@@ -24,8 +25,7 @@ struct ForwardingRowView: View {
     }
 
     private var stateLabel: String? {
-        let server = forwarding?.serverDisplayName
-        let serverPrefix = server.map { "\($0) · " } ?? ""
+        let serverPrefix = serverDisplayName.map { "\($0) · " } ?? ""
         switch forwarding?.state {
         case .starting:
             return "\(serverPrefix)포워딩 연결 중…"
@@ -153,6 +153,7 @@ private struct OpenInBrowserButton: View {
     ForwardingRowView(
         port: RemotePort(port: 8080, address: "0.0.0.0", processName: "nginx"),
         forwarding: nil,
+        serverDisplayName: nil,
         onToggle: {}
     )
     .padding()
@@ -162,7 +163,8 @@ private struct OpenInBrowserButton: View {
 #Preview("Starting") {
     ForwardingRowView(
         port: RemotePort(port: 5432, address: "127.0.0.1", processName: "postgres"),
-        forwarding: Forwarding(serverId: UUID(), serverDisplayName: "db-01", remotePort: 5432, localPort: 5432, state: .starting),
+        forwarding: Forwarding(serverId: UUID(), remotePort: 5432, localPort: 5432, state: .starting),
+        serverDisplayName: "db-01",
         onToggle: {}
     )
     .padding()
@@ -172,7 +174,8 @@ private struct OpenInBrowserButton: View {
 #Preview("Active") {
     ForwardingRowView(
         port: RemotePort(port: 6443, address: "0.0.0.0", processName: nil),
-        forwarding: Forwarding(serverId: UUID(), serverDisplayName: "k8s-master", remotePort: 6443, localPort: 6443, state: .active),
+        forwarding: Forwarding(serverId: UUID(), remotePort: 6443, localPort: 6443, state: .active),
+        serverDisplayName: "k8s-master",
         onToggle: {}
     )
     .padding()
@@ -182,7 +185,8 @@ private struct OpenInBrowserButton: View {
 #Preview("Error") {
     ForwardingRowView(
         port: RemotePort(port: 3389, address: "0.0.0.0", processName: "rdp"),
-        forwarding: Forwarding(serverId: UUID(), serverDisplayName: "win-vm", remotePort: 3389, localPort: 3389, state: .error("connection refused")),
+        forwarding: Forwarding(serverId: UUID(), remotePort: 3389, localPort: 3389, state: .error("connection refused")),
+        serverDisplayName: "win-vm",
         onToggle: {}
     )
     .padding()

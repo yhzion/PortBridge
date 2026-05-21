@@ -10,7 +10,6 @@ struct Forwarding: Identifiable, Equatable {
 
     let id: UUID
     let serverId: UUID
-    let serverDisplayName: String
     let remotePort: Int
     var localPort: Int
     var state: State
@@ -18,14 +17,12 @@ struct Forwarding: Identifiable, Equatable {
     init(
         id: UUID = UUID(),
         serverId: UUID,
-        serverDisplayName: String,
         remotePort: Int,
         localPort: Int,
         state: State
     ) {
         self.id = id
         self.serverId = serverId
-        self.serverDisplayName = serverDisplayName
         self.remotePort = remotePort
         self.localPort = localPort
         self.state = state

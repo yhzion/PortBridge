@@ -172,6 +172,7 @@ struct ServerListView: View {
             ForwardingRowView(
                 port: port,
                 forwarding: fw,
+                serverDisplayName: vm.serverDisplayName(for: fw.serverId),
                 onToggle: { Task { await vm.toggleForwarding(serverId: fw.serverId, for: port) } }
             )
         }

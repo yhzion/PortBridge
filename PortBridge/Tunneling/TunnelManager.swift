@@ -73,7 +73,6 @@ final class TunnelManager {
 
         let forwarding = Forwarding(
             serverId: server.id,
-            serverDisplayName: server.displayName,
             remotePort: remotePort,
             localPort: localPort,
             state: .active
