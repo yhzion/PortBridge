@@ -114,6 +114,39 @@ final class AppViewModel {
         favorites.toggle(FavoriteKey(serverId: serverId, remotePort: port))
     }
 
+    var favoriteRows: [FavoriteRow] {
+        favorites.favorites.compactMap { key -> FavoriteRow? in
+            guard let server = store.servers.first(where: { $0.id == key.serverId }) else {
+                return nil
+            }
+            let forwarding = forwardings.first(where: {
+                $0.serverId == key.serverId && $0.remotePort == key.remotePort
+            })
+            let section = serverSections.first(where: { $0.server.id == key.serverId })
+            let processName = section?.ports.first(where: { $0.port == key.remotePort })?.processName
+            return FavoriteRow(
+                id: key,
+                serverDisplayName: server.displayName,
+                remotePort: key.remotePort,
+                localPort: forwarding?.localPort,
+                processName: processName,
+                state: forwarding?.state ?? .idle
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.serverDisplayName == rhs.serverDisplayName {
+                return lhs.remotePort < rhs.remotePort
+            }
+            return lhs.serverDisplayName < rhs.serverDisplayName
+        }
+    }
+
+    var nonFavoriteActive: [Forwarding] {
+        activeForwardings.filter { fw in
+            !isFavorite(serverId: fw.serverId, port: fw.remotePort)
+        }
+    }
+
     // MARK: - Server CRUD
 
     func addServer(_ server: Server) {
@@ -263,3 +296,28 @@ extension AppViewModel: TunnelManagerDelegate {
         }
     }
 }
+
+struct FavoriteRow: Identifiable, Equatable {
+    let id: FavoriteKey
+    let serverDisplayName: String
+    let remotePort: Int
+    let localPort: Int?
+    let processName: String?
+    let state: Forwarding.State
+}
+
+#if DEBUG
+extension AppViewModel {
+    /// Test-only helper to inject an active forwarding state.
+    func _test_injectActiveForwarding(serverId: UUID, remotePort: Int, localPort: Int? = nil) {
+        let fw = Forwarding(
+            serverId: serverId,
+            remotePort: remotePort,
+            localPort: localPort ?? remotePort,
+            state: .active,
+            activatedAt: Date()
+        )
+        forwardings.append(fw)
+    }
+}
+#endif
