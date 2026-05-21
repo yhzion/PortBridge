@@ -60,14 +60,14 @@ final class TunnelManager {
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if data.isEmpty { return }
-            stderrBuffer.append(data)
+            Task { await stderrBuffer.append(data) }
         }
 
         try process.run()
 
         try await Task.sleep(nanoseconds: 2_000_000_000)
         if !process.isRunning {
-            let stderr = stderrBuffer.snapshot()
+            let stderr = await stderrBuffer.snapshot()
             throw PortBridgeError.forwardingDiedEarly(stderr: stderr)
         }
 
@@ -109,7 +109,7 @@ final class TunnelManager {
 
     private func handleTunnelExit(id: UUID) async {
         guard let tunnel = active[id] else { return }
-        let stderr = tunnel.stderr.snapshot()
+        let stderr = await tunnel.stderr.snapshot()
         active.removeValue(forKey: id)
         await delegate?.tunnelDidExit(id: id, stderr: stderr)
     }
@@ -142,13 +142,11 @@ final class ActiveTunnel {
     }
 }
 
-final class StderrRingBuffer: @unchecked Sendable {
+actor StderrRingBuffer {
     private let maxBytes = 4 * 1024
     private var buffer = Data()
-    private let lock = NSLock()
 
     func append(_ data: Data) {
-        lock.lock(); defer { lock.unlock() }
         buffer.append(data)
         if buffer.count > maxBytes {
             buffer.removeFirst(buffer.count - maxBytes)
@@ -156,7 +154,6 @@ final class StderrRingBuffer: @unchecked Sendable {
     }
 
     func snapshot() -> String {
-        lock.lock(); defer { lock.unlock() }
-        return String(data: buffer, encoding: .utf8) ?? ""
+        String(data: buffer, encoding: .utf8) ?? ""
     }
 }
