@@ -6,7 +6,13 @@ nonisolated struct PortScanner {
     let sshExecutable: String = "/usr/bin/ssh"
 
     func scan(server: Server, range: ClosedRange<Int> = 1000...65535) async throws -> [RemotePort] {
-        let remoteCommand = "ss -tlnpH 2>/dev/null || lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null"
+        let remoteCommand = """
+        if ! command -v ss >/dev/null 2>&1 && ! command -v lsof >/dev/null 2>&1; then
+          echo PORTBRIDGE_TOOLS_MISSING >&2
+          exit 127
+        fi
+        ss -tlnpH 2>/dev/null || lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null
+        """
         let args = [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=10",
@@ -19,14 +25,28 @@ nonisolated struct PortScanner {
 
         if result.exitCode != 0 {
             let stderr = result.stderr.lowercased()
+
+            // 1. 인증 실패 (최우선)
             if stderr.contains("permission denied") || stderr.contains("publickey") {
                 throw PortBridgeError.sshAuthFailed(host: server.host)
             }
-            if stderr.contains("connection timed out") || stderr.contains("connect timeout") {
-                throw PortBridgeError.sshConnectTimeout(host: server.host)
+
+            // 2. 도달 불가 패턴 통합 (timeout 포함)
+            let unreachablePatterns = [
+                "connection timed out", "connect timeout",
+                "no route to host",
+                "connection refused",
+                "could not resolve hostname", "name or service not known",
+                "network is unreachable",
+                "host is down",
+            ]
+            if unreachablePatterns.contains(where: { stderr.contains($0) }) {
+                throw PortBridgeError.serverUnreachable(host: server.host, reason: result.stderr)
             }
-            if result.stdout.isEmpty {
-                throw PortBridgeError.remoteCommandNotFound
+
+            // 3. 도구 부재
+            if result.exitCode == 127 || stderr.contains("portbridge_tools_missing") {
+                throw PortBridgeError.remoteToolsMissing
             }
         }
 

@@ -25,8 +25,22 @@ struct ServerSectionView: View {
 
     var body: some View {
         sectionHeader
-        if section.isExpanded {
+        if section.isExpanded && !isOffline {
             sectionContent
+        }
+    }
+
+    private var isOffline: Bool {
+        if case .offline = section.scanState { return true }
+        return false
+    }
+
+    private var statusDot: ServerStatusDot {
+        switch section.scanState {
+        case .offline(let isRetrying): return .offline(pulse: isRetrying)
+        case .toolMissing, .authFailed: return .warning
+        case .loaded: return .online
+        default: return .none
         }
     }
 
@@ -57,6 +71,12 @@ struct ServerSectionView: View {
                 ForwardingRowView(port: port, forwarding: nil, onToggle: { onToggle(port) })
             }
 
+        case .offline:
+            EmptyView()   // 안전망 — body는 isOffline 분기로 이미 미렌더되지만 switch exhaustiveness 위해 유지
+
+        case .toolMissing:
+            ToolInstallGuideView()
+
         case .error(let msg):
             Label(msg, systemImage: "exclamationmark.triangle")
                 .font(.caption)
@@ -85,23 +105,29 @@ struct ServerSectionView: View {
 
     private var sectionHeader: some View {
         HStack(spacing: 8) {
-            Button(action: toggleExpandedAnimated) {
-                Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12)
+            if !isOffline {
+                Button(action: toggleExpandedAnimated) {
+                    Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                        .transaction { $0.animation = nil }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(section.isExpanded ? "접기" : "펼치기")
+            } else {
+                // 12px 자리 비움 — 다른 행과 가로 정렬 유지
+                Color.clear.frame(width: 12, height: 12)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(section.isExpanded ? "접기" : "펼치기")
 
-            ServerMonogram(server: section.server)
+            ServerMonogram(server: section.server, status: statusDot, dimmed: isOffline)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(primaryLabel)
                     .font(.headline)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isOffline ? .secondary : .primary)
                     .lineLimit(1)
                 Text(secondaryLabel)
                     .font(.system(.caption, design: .monospaced))
@@ -111,7 +137,7 @@ struct ServerSectionView: View {
 
             Spacer(minLength: 8)
 
-            if activeCount > 0 {
+            if activeCount > 0 && !isOffline {
                 Text("\(activeCount)")
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .monospacedDigit()
@@ -125,7 +151,7 @@ struct ServerSectionView: View {
 
             if case .scanning = section.scanState {
                 ProgressView().controlSize(.small)
-            } else {
+            } else if !isOffline {
                 Button { Task { await section.scan() } } label: {
                     Image(systemName: "arrow.clockwise").font(.body).foregroundStyle(.secondary)
                 }
@@ -148,12 +174,43 @@ struct ServerSectionView: View {
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .onTapGesture(perform: toggleExpandedAnimated)
+        .onTapGesture { handleRowTap() }
+    }
+
+    private func handleRowTap() {
+        if isOffline {
+            Task { await section.scan() }
+        } else {
+            toggleExpandedAnimated()
+        }
+    }
+}
+
+enum ServerStatusDot: Equatable {
+    case none
+    case offline(pulse: Bool)
+    case warning   // 노랑 — toolMissing / authFailed
+    case online    // 녹색
+
+    var fill: Color? {
+        switch self {
+        case .none: return nil
+        case .offline: return .secondary.opacity(0.5)
+        case .warning: return .orange
+        case .online: return .green
+        }
+    }
+
+    var pulses: Bool {
+        if case .offline(true) = self { return true }
+        return false
     }
 }
 
 private struct ServerMonogram: View {
     let server: Server
+    var status: ServerStatusDot = .none
+    var dimmed: Bool = false
 
     private var initial: String {
         let source = server.name ?? server.host
@@ -161,9 +218,6 @@ private struct ServerMonogram: View {
         return String(first).uppercased()
     }
 
-    /// Deterministic hue from host via FNV-1a 32-bit. Swift's `String.hashValue` is
-    /// randomized per process, and a plain byte sum collapses anagrams like
-    /// `prod-01`/`prod-10` to the same color.
     private var hue: Double {
         var hash: UInt32 = 0x811c9dc5
         for byte in server.host.utf8 {
@@ -179,16 +233,57 @@ private struct ServerMonogram: View {
             saturation: Color.PB.Monogram.saturation,
             brightness: Color.PB.Monogram.brightness
         )
-        ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(tint.opacity(Color.PB.Monogram.fillOpacity))
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(tint.opacity(Color.PB.Monogram.strokeOpacity), lineWidth: 0.5)
-            Text(initial)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(tint)
+        ZStack(alignment: .bottomTrailing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(tint.opacity(Color.PB.Monogram.fillOpacity))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(tint.opacity(Color.PB.Monogram.strokeOpacity), lineWidth: 0.5)
+                Text(initial)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 24, height: 24)
+            .opacity(dimmed ? 0.55 : 1.0)
+
+            if let fill = status.fill {
+                StatusDot(fill: fill, pulses: status.pulses)
+                    .offset(x: 2, y: 2)
+            }
         }
         .frame(width: 24, height: 24)
+    }
+}
+
+private struct StatusDot: View {
+    let fill: Color
+    let pulses: Bool
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(fill)
+            .frame(width: 8, height: 8)
+            .overlay(
+                Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 1.5)
+            )
+            .opacity(pulses ? (pulse ? 1.0 : 0.4) : 1.0)
+            .scaleEffect(pulses ? (pulse ? 1.0 : 0.9) : 1.0)
+            .onAppear { startPulseIfNeeded() }
+            .onChange(of: pulses) { _, newValue in
+                if newValue {
+                    startPulseIfNeeded()
+                } else {
+                    withAnimation(.default) { pulse = false }
+                }
+            }
+    }
+
+    private func startPulseIfNeeded() {
+        guard pulses else { return }
+        withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+            pulse = true
+        }
     }
 }
 
@@ -207,20 +302,104 @@ private struct AuthFailedView: View {
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
-                Button(copied ? "복사됨 ✓" : "복사") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(copyCommand, forType: .string)
-                    copied = true
-                    Task {
-                        try? await Task.sleep(nanoseconds: 2_000_000_000)
-                        copied = false
-                    }
+
+                Spacer(minLength: 0)
+
+                Button(action: copy) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption)
+                        .foregroundStyle(copied ? Color.green : Color.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                        .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(copied ? Color.green : Color.accentColor)
+                .buttonStyle(.plain)
+                .help(copied ? "복사됨" : "복사")
+                .accessibilityLabel(copied ? "복사됨" : "명령 복사")
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(copyCommand, forType: .string)
+        withAnimation { copied = true }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            withAnimation { copied = false }
+        }
+    }
+}
+
+private struct ToolInstallGuideView: View {
+    private let commands: [(distro: String, command: String)] = [
+        ("Debian / Ubuntu", "sudo apt install iproute2 lsof"),
+        ("RHEL / CentOS",   "sudo yum install iproute lsof"),
+        ("Alpine",          "apk add iproute2 lsof"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("원격 서버에 ss 또는 lsof가 필요합니다", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+
+            Text("포트 목록을 조회하려면 둘 중 하나가 설치되어 있어야 합니다.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(commands, id: \.distro) { item in
+                    InstallCommandRow(distro: item.distro, command: item.command)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct InstallCommandRow: View {
+    let distro: String
+    let command: String
+    @State private var copied = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(distro)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(width: 100, alignment: .leading)
+
+            Text(command)
+                .font(.system(.caption, design: .monospaced))
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                .textSelection(.enabled)
+
+            Spacer(minLength: 0)
+
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.caption)
+                    .foregroundStyle(copied ? Color.green : Color.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .help(copied ? "복사됨" : "복사")
+            .accessibilityLabel(copied ? "복사됨" : "\(distro) 명령 복사")
+        }
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        withAnimation { copied = true }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            withAnimation { copied = false }
+        }
     }
 }

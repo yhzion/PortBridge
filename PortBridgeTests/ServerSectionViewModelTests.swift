@@ -45,16 +45,17 @@ final class ServerSectionViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func test_scan_connectTimeout_setsError() async {
+    func test_scan_connectTimeout_setsOffline() async {
         let mock = MockCommandRunner()
         mock.responses = [
             CommandResult(exitCode: 255, stdout: "", stderr: "Connection timed out")
         ]
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
-        guard case .error = vm.scanState else {
-            XCTFail("expected .error, got \(vm.scanState)"); return
+        guard case .offline(let isRetrying) = vm.scanState else {
+            XCTFail("expected .offline, got \(vm.scanState)"); return
         }
+        XCTAssertFalse(isRetrying)
     }
 
     @MainActor
@@ -90,5 +91,49 @@ final class ServerSectionViewModelTests: XCTestCase {
         let server = makeServer()
         let vm = ServerSectionViewModel(server: server)
         XCTAssertEqual(vm.id, server.id)
+    }
+
+    @MainActor
+    func test_scan_noRouteToHost_setsOffline() async {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: No route to host")
+        ]
+        let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
+        await vm.scan()
+        if case .offline = vm.scanState { return }
+        XCTFail("expected .offline, got \(vm.scanState)")
+    }
+
+    @MainActor
+    func test_scan_toolsMissing_setsToolMissing() async {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 127, stdout: "", stderr: "PORTBRIDGE_TOOLS_MISSING")
+        ]
+        let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
+        await vm.scan()
+        XCTAssertEqual(vm.scanState, .toolMissing)
+    }
+
+    @MainActor
+    func test_scan_fromOffline_silentlyRetries() async {
+        // 첫 스캔: 오프라인
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "No route to host"),
+            CommandResult(exitCode: 255, stdout: "", stderr: "No route to host"),
+        ]
+        let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
+        await vm.scan()
+        guard case .offline(false) = vm.scanState else {
+            XCTFail("expected .offline(false), got \(vm.scanState)"); return
+        }
+
+        // 재스캔: 핵심 검증은 .scanning을 거치지 않는다는 것 — 직접 검증은 race-prone이므로
+        // 최종 상태가 .offline 임을 검증.
+        await vm.scan()
+        if case .offline = vm.scanState { return }
+        XCTFail("expected .offline after retry, got \(vm.scanState)")
     }
 }

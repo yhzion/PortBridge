@@ -90,6 +90,103 @@ final class PortScannerTests: XCTestCase {
         }
     }
 
+    func test_connectionTimedOut_throwsServerUnreachable() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Connection timed out")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            guard case .serverUnreachable(let host, _) = error else {
+                XCTFail("expected .serverUnreachable, got \(error)"); return
+            }
+            XCTAssertEqual(host, "prod")
+        }
+    }
+
+    func test_noRouteToHost_throwsServerUnreachable() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host 10.0.0.1 port 22: No route to host")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            guard case .serverUnreachable = error else {
+                XCTFail("expected .serverUnreachable, got \(error)"); return
+            }
+        }
+    }
+
+    func test_connectionRefused_throwsServerUnreachable() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Connection refused")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            guard case .serverUnreachable = error else {
+                XCTFail("expected .serverUnreachable, got \(error)"); return
+            }
+        }
+    }
+
+    func test_couldNotResolveHostname_throwsServerUnreachable() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: Could not resolve hostname prod: Name or service not known")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            guard case .serverUnreachable = error else {
+                XCTFail("expected .serverUnreachable, got \(error)"); return
+            }
+        }
+    }
+
+    func test_networkUnreachable_throwsServerUnreachable() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Network is unreachable")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            guard case .serverUnreachable = error else {
+                XCTFail("expected .serverUnreachable, got \(error)"); return
+            }
+        }
+    }
+
+    func test_hostIsDown_throwsServerUnreachable() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Host is down")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            guard case .serverUnreachable = error else {
+                XCTFail("expected .serverUnreachable, got \(error)"); return
+            }
+        }
+    }
+
     func test_sshArgs_includePortAndTarget() async throws {
         let mock = MockCommandRunner()
         mock.responses = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
@@ -100,5 +197,45 @@ final class PortScannerTests: XCTestCase {
         XCTAssertTrue(args.contains("-p"), "args should contain -p flag")
         XCTAssertTrue(args.contains("2222"), "args should contain port")
         XCTAssertTrue(args.contains("deploy@10.0.0.1"), "args should contain user@host")
+    }
+
+    func test_toolsMissingMarker_throwsRemoteToolsMissing() async throws {
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 127, stdout: "", stderr: "PORTBRIDGE_TOOLS_MISSING\n")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            XCTAssertEqual(error, .remoteToolsMissing)
+        }
+    }
+
+    func test_exit127WithoutMarker_throwsRemoteToolsMissing() async throws {
+        // 일부 셸은 stderr 출력 없이 127만 반환 — fallback으로도 잡혀야 함.
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 127, stdout: "", stderr: "")
+        ]
+        let scanner = PortScanner(runner: mock)
+        do {
+            _ = try await scanner.scan(server: makeServer())
+            XCTFail("expected throw")
+        } catch let error as PortBridgeError {
+            XCTAssertEqual(error, .remoteToolsMissing)
+        }
+    }
+
+    func test_emptyStdoutWithoutErrorSignal_returnsEmptyArray() async throws {
+        // 도구 부재가 아니라 단순히 listening 포트가 없는 경우 — 빈 배열 반환.
+        let mock = MockCommandRunner()
+        mock.responses = [
+            CommandResult(exitCode: 0, stdout: "", stderr: "")
+        ]
+        let scanner = PortScanner(runner: mock)
+        let ports = try await scanner.scan(server: makeServer())
+        XCTAssertEqual(ports.count, 0)
     }
 }
