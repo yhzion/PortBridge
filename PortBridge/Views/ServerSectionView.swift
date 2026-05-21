@@ -118,49 +118,58 @@ struct ServerSectionView: View {
 
     private var sectionHeader: some View {
         HStack(spacing: 8) {
-            if !isOffline {
-                Button(action: toggleExpandedAnimated) {
-                    Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 12)
-                        .transaction { $0.animation = nil }
+            Button(action: handleRowTap) {
+                HStack(spacing: 8) {
+                    if !isOffline {
+                        Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 12)
+                            .transaction { $0.animation = nil }
+                            .accessibilityHidden(true)
+                    } else {
+                        // 12px 자리 비움 — 다른 행과 가로 정렬 유지
+                        Color.clear.frame(width: 12, height: 12)
+                    }
+
+                    ServerMonogram(server: section.server, status: statusDot, dimmed: isOffline)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(primaryLabel)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(isOffline ? .secondary : .primary)
+                            .lineLimit(1)
+                        Text(secondaryLabel)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if activeCount > 0 && !isOffline {
+                        Text(verbatim: "\(activeCount)")
+                            .font(.system(.caption, design: .rounded).weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.tint)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Color.PB.accentBadgeBg, in: Capsule())
+                            .help("이 서버에서 포워딩 중인 포트 수")
+                            .accessibilityLabel(activeCountAccessibility)
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(section.isExpanded ? "접기" : "펼치기")
-            } else {
-                // 12px 자리 비움 — 다른 행과 가로 정렬 유지
-                Color.clear.frame(width: 12, height: 12)
+                .contentShape(Rectangle())
             }
-
-            ServerMonogram(server: section.server, status: statusDot, dimmed: isOffline)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(primaryLabel)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(isOffline ? .secondary : .primary)
-                    .lineLimit(1)
-                Text(secondaryLabel)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            if activeCount > 0 && !isOffline {
-                Text(verbatim: "\(activeCount)")
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.tint)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Color.PB.accentBadgeBg, in: Capsule())
-                    .help("이 서버에서 포워딩 중인 포트 수")
-                    .accessibilityLabel(activeCountAccessibility)
-            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("\(primaryLabel) \(secondaryLabel)")
+            .accessibilityValue(isOffline ? "오프라인" : (section.isExpanded ? "펼침" : "접힘"))
+            .accessibilityHint(isOffline
+                ? "이중 탭하여 재스캔"
+                : "이중 탭하여 \(section.isExpanded ? "접기" : "펼치기")")
 
             if case .scanning = section.scanState {
                 ProgressView().controlSize(.small)
@@ -186,8 +195,6 @@ struct ServerSectionView: View {
             .accessibilityLabel("\(primaryLabel) 더보기")
         }
         .padding(.vertical, 6)
-        .contentShape(Rectangle())
-        .onTapGesture { handleRowTap() }
     }
 
     private func handleRowTap() {
