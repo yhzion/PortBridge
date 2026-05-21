@@ -9,13 +9,13 @@ final class PortScannerTests: XCTestCase {
 
     func test_ssSuccess_returnsParsedPorts() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(
                 exitCode: 0,
                 stdout: "LISTEN 0 128 0.0.0.0:3000 0.0.0.0:*\nLISTEN 0 100 127.0.0.1:5432 0.0.0.0:*",
                 stderr: ""
             )
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         let ports = try await scanner.scan(server: makeServer())
         XCTAssertEqual(ports.count, 2)
@@ -25,13 +25,13 @@ final class PortScannerTests: XCTestCase {
 
     func test_filtersOutOfRangePorts() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(
                 exitCode: 0,
                 stdout: "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 128 0.0.0.0:3000 0.0.0.0:*",
                 stderr: ""
             )
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         let ports = try await scanner.scan(server: makeServer(), range: 1000...65535)
         XCTAssertEqual(ports.count, 1)
@@ -40,7 +40,7 @@ final class PortScannerTests: XCTestCase {
 
     func test_scan_deduplicatesIPv4AndIPv6WildcardForSamePort() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(
                 exitCode: 0,
                 stdout: """
@@ -49,7 +49,7 @@ final class PortScannerTests: XCTestCase {
                 """,
                 stderr: ""
             )
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         let ports = try await scanner.scan(server: makeServer())
         XCTAssertEqual(ports.count, 1)
@@ -60,7 +60,7 @@ final class PortScannerTests: XCTestCase {
 
     func test_scan_deduplicatesLoopbackForSamePort() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(
                 exitCode: 0,
                 stdout: """
@@ -69,7 +69,7 @@ final class PortScannerTests: XCTestCase {
                 """,
                 stderr: ""
             )
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         let ports = try await scanner.scan(server: makeServer())
         XCTAssertEqual(ports.count, 1)
@@ -78,9 +78,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_authFailedStderr_throwsAuthError() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "Permission denied (publickey).")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -92,9 +92,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_connectionTimedOut_throwsServerUnreachable() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Connection timed out")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -109,9 +109,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_noRouteToHost_throwsServerUnreachable() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host 10.0.0.1 port 22: No route to host")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -125,9 +125,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_connectionRefused_throwsServerUnreachable() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Connection refused")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -141,9 +141,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_couldNotResolveHostname_throwsServerUnreachable() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "ssh: Could not resolve hostname prod: Name or service not known")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -157,9 +157,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_networkUnreachable_throwsServerUnreachable() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Network is unreachable")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -173,9 +173,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_hostIsDown_throwsServerUnreachable() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: Host is down")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -189,11 +189,11 @@ final class PortScannerTests: XCTestCase {
 
     func test_sshArgs_includePortAndTarget() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
+        await mock.setResponses([CommandResult(exitCode: 0, stdout: "", stderr: "")])
         let scanner = PortScanner(runner: mock)
         let server = Server(user: "deploy", host: "10.0.0.1", port: 2222)
         _ = try await scanner.scan(server: server)
-        let args = mock.calls.first?.args ?? []
+        let args = await mock.calls.first?.args ?? []
         XCTAssertTrue(args.contains("-p"), "args should contain -p flag")
         XCTAssertTrue(args.contains("2222"), "args should contain port")
         XCTAssertTrue(args.contains("deploy@10.0.0.1"), "args should contain user@host")
@@ -201,9 +201,9 @@ final class PortScannerTests: XCTestCase {
 
     func test_toolsMissingMarker_throwsRemoteToolsMissing() async throws {
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 127, stdout: "", stderr: "PORTBRIDGE_TOOLS_MISSING\n")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -216,9 +216,9 @@ final class PortScannerTests: XCTestCase {
     func test_exit127WithoutMarker_throwsRemoteToolsMissing() async throws {
         // 일부 셸은 stderr 출력 없이 127만 반환 — fallback으로도 잡혀야 함.
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 127, stdout: "", stderr: "")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         do {
             _ = try await scanner.scan(server: makeServer())
@@ -231,9 +231,9 @@ final class PortScannerTests: XCTestCase {
     func test_emptyStdoutWithoutErrorSignal_returnsEmptyArray() async throws {
         // 도구 부재가 아니라 단순히 listening 포트가 없는 경우 — 빈 배열 반환.
         let mock = MockCommandRunner()
-        mock.responses = [
+        await mock.setResponses([
             CommandResult(exitCode: 0, stdout: "", stderr: "")
-        ]
+        ])
         let scanner = PortScanner(runner: mock)
         let ports = try await scanner.scan(server: makeServer())
         XCTAssertEqual(ports.count, 0)
