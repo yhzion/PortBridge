@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let viewModel: AppViewModel
 
     override init() {
-        if !Self.isRunningUnderXCTest {
+        if !Self.isRunningUnderTest {
             AppSingleInstance.exitIfAnotherInstanceIsRunning()
             // Reap any ssh port-forward processes left orphaned by a previous run
             // (force-quit, crash, Xcode stop) before constructing the view model.
@@ -45,7 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppSingleInstance.stop()
     }
 
-    private static var isRunningUnderXCTest: Bool {
+    private static var isRunningUnderTest: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.arguments.contains("-UITesting")
     }
 }
