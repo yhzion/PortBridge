@@ -107,7 +107,6 @@ struct ForwardingRowView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
-            .accessibilityAddTraits(.isButton)
 
             if isActive, let local = forwarding?.localPort {
                 OpenInBrowserButton(localPort: local)
