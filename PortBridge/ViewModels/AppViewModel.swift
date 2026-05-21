@@ -200,6 +200,54 @@ final class AppViewModel {
         }
     }
 
+    // MARK: - Menu bar (right-click toggle)
+
+    /// 메뉴바 아이콘이 "ON" 상태로 보일지 결정하는 파생 상태.
+    /// 즐겨찾기 중 하나라도 active 또는 starting 이면 true.
+    var isAnyFavoriteActive: Bool {
+        favoriteRows.contains { row in
+            switch row.state {
+            case .active, .starting: return true
+            case .idle, .error: return false
+            }
+        }
+    }
+
+    /// 메뉴바 우클릭 핸들러 — 모든 즐겨찾기를 일괄 토글 (Amphetamine 패턴).
+    ///
+    /// 규칙:
+    /// - 하나라도 ON (isAnyFavoriteActive == true)  → 전부 OFF
+    /// - 모두 OFF                                    → 전부 ON
+    ///
+    /// 단일 forwarding 토글은 `toggleForwarding(serverId:for:)`를 사용하면 됩니다.
+    /// 그 함수가 idempotent하지 않다는 점에 주의 — 같은 상태로 호출하면 반대로 뒤집습니다.
+    /// 따라서 "전부 ON" 작업에서는 이미 active인 항목을 건드리면 오히려 끄게 됩니다.
+    ///
+    /// TODO(직접 작성): 아래 함수 본문 구현. favoriteRows를 순회하면서
+    /// 현재 모드(끄기 모드 vs 켜기 모드)에 따라 적절한 항목만 toggleForwarding 호출.
+    /// 비동기 동시 실행에는 withTaskGroup 사용을 권장합니다 (startFavoritesIfEnabled 참고).
+    func toggleAllFavorites() async {
+        let shouldTurnOff = isAnyFavoriteActive
+        let targets = favoriteRows.filter { row in
+            let isActive: Bool
+            switch row.state {
+            case .active, .starting: isActive = true
+            case .idle, .error:      isActive = false
+            }
+            return isActive == shouldTurnOff
+        }
+        await withTaskGroup(of: Void.self) { group in
+            for row in targets {
+                let port = RemotePort(port: row.remotePort, address: "0.0.0.0",
+                                      processName: row.processName)
+                let serverId = row.id.serverId
+                group.addTask { @MainActor in
+                    await self.toggleForwarding(serverId: serverId, for: port)
+                }
+            }
+        }
+    }
+
     // MARK: - Forwarding
 
     func toggleForwarding(serverId: UUID, for port: RemotePort) async {
