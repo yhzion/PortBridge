@@ -671,6 +671,8 @@ git commit -m "refactor(ssot): fold activatedAt into Forwarding
 
 ---
 
+> **Post-execution addendum (2026-05-21):** Task 3은 `7db0ebc`로 계획대로 4필드(`id/process/stderr/monitorTask`)에 커밋되었으나, Task 4 직후 발견된 stderr 순서/tail 손실 회귀를 수정하는 `7c9bbe2 fix(concurrency): preserve stderr order and tail via AsyncStream` 에서 `stderrContinuation`·`stderrConsumer` 2개 필드가 다시 추가되어 **최종 상태는 6필드**다. 자세한 내용은 [Task 4 Post-execution addendum](#task-4-p5--stderrringbuffer를-actor로-전환) 참고. 아래 Step 3.1/3.2는 회귀 수정 이전 시점의 계획 의도이므로, 현재 코드를 변경하지 말 것.
+
 - [ ] **Step 3.1: `ActiveTunnel`을 슬림화**
 
 `PortBridge/Tunneling/TunnelManager.swift:133-144`(`final class ActiveTunnel` 전체)를 다음으로 교체:
@@ -773,6 +775,17 @@ ActiveTunnel은 더 이상 Forwarding 객체를 복제 보유하지 않는다.
 - Modify: `PortBridge/Tunneling/TunnelManager.swift`
 
 ---
+
+> **Post-execution addendum (2026-05-21):** Task 4의 `actor` 전환은 `604e1ee`로 커밋되었으나, Step 4.2의 패턴(`Task { await stderrBuffer.append(data) }`)이 두 가지 회귀를 야기했다:
+> - **순서 깨짐**: `Task` 스케줄러가 enqueue 순서와 무관하게 actor에 append를 도착시킴
+> - **tail 손실**: `snapshot()` 시점에 아직 스케줄되지 않은 Task의 데이터가 누락
+>
+> 이를 `7c9bbe2 fix(concurrency): preserve stderr order and tail via AsyncStream`에서 다음 구조로 교체했다:
+> 1. `start()`에서 `AsyncStream<Data>` 채널과 단일 consumer Task 생성 — `readabilityHandler`는 동기적으로 `continuation.yield(data)`만 호출(순서 보장)
+> 2. `ActiveTunnel`은 `stderrContinuation`/`stderrConsumer`를 추가로 보유 ([Task 3 addendum](#task-3-p2--activetunnel에서-forwarding-복제본-제거) 참고)
+> 3. snapshot 이전에는 `continuation.finish()` → `await consumer.value`로 모든 청크 적용 후 스냅샷
+>
+> 따라서 아래 Step 4.2/4.3/4.4는 회귀 수정 이전 시점의 계획 의도다. 현재 코드는 AsyncStream 파이프라인을 사용하며, 변경하지 말 것.
 
 - [ ] **Step 4.1: `StderrRingBuffer`를 actor로 전환**
 
@@ -891,7 +904,7 @@ git commit -m "refactor(concurrency): convert StderrRingBuffer to actor
 **Type consistency:**
 - `Forwarding(serverId:remotePort:localPort:state:)`가 Task 1·Task 3에서 일관.
 - Task 2가 추가하는 `activatedAt:`는 기본값 `nil`이라 기존 호출자(Task 3의 `TunnelManager.start`)와 호환.
-- `ActiveTunnel.init(id:process:stderr:)` — Task 3 안에서 일관.
+- `ActiveTunnel.init(id:process:stderr:)` — Task 3 안에서 일관 (단, post-execution에서 `stderrContinuation`/`stderrConsumer` 2개 인자가 추가되어 최종 시그니처는 `init(id:process:stderr:stderrContinuation:stderrConsumer:)`. [Task 3 addendum](#task-3-p2--activetunnel에서-forwarding-복제본-제거) 참고).
 - `serverDisplayName(for:) -> String?` — 모든 호출 사이트(`ForwardingRowView`, `PortConflictSheet`)에서 동일 옵셔널 시그니처.
 
 **Placeholder scan:** 모든 단계가 실제 코드/명령/기대 출력 포함.
