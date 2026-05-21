@@ -265,21 +265,33 @@ private struct AuthFailedView: View {
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
-                Button(copied ? "복사됨 ✓" : "복사") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(copyCommand, forType: .string)
-                    copied = true
-                    Task {
-                        try? await Task.sleep(nanoseconds: 2_000_000_000)
-                        copied = false
-                    }
+
+                Spacer(minLength: 0)
+
+                Button(action: copy) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption)
+                        .foregroundStyle(copied ? Color.green : Color.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                        .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(copied ? Color.green : Color.accentColor)
+                .buttonStyle(.plain)
+                .help(copied ? "복사됨" : "복사")
+                .accessibilityLabel(copied ? "복사됨" : "명령 복사")
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(copyCommand, forType: .string)
+        withAnimation { copied = true }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            withAnimation { copied = false }
+        }
     }
 }
 
