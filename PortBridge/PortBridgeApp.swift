@@ -7,26 +7,32 @@ struct PortBridgeApp: App {
 
     var body: some Scene {
         WindowGroup(id: "main") {
-            ContentView()
-                .environment(delegate.viewModel)
+            MainContentHost(viewModel: delegate.viewModel)
         }
         .commands {
             // ⌘N은 ServerListView에서 "서버 추가"에 사용하므로 기본 "새 창" 바인딩 해제.
             CommandGroup(replacing: .newItem) {}
         }
+    }
+}
 
-        MenuBarExtra {
-            MenuBarContent()
-                .environment(delegate.viewModel)
-        } label: {
-            Image(systemName: "arrow.triangle.swap")
-        }
-        .menuBarExtraStyle(.menu)
+/// WindowGroup의 루트. openWindow 환경값을 얻어 메뉴바의 "Open Main Window" 알림에 반응합니다.
+private struct MainContentHost: View {
+    let viewModel: AppViewModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        ContentView()
+            .environment(viewModel)
+            .onReceive(NotificationCenter.default.publisher(for: .openPortBridgeMainWindow)) { _ in
+                openWindow(id: "main")
+            }
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let viewModel: AppViewModel
+    private var menuBarController: MenuBarController?
 
     override init() {
         if !Self.isRunningUnderTest {
@@ -48,13 +54,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 메뉴바 아이콘 + 좌/우클릭 핸들러 설치
+        let controller = MenuBarController(viewModel: viewModel)
+        controller.install()
+        self.menuBarController = controller
+
         // 즐겨찾기 자동 시작 — launchAtLogin이 켜져 있을 때만
         Task { @MainActor in
             await viewModel.startFavoritesIfEnabled()
         }
 
         // UI 테스트가 메인 윈도우 표시를 명시 요청한 경우 (LaunchSmokeTests 참조).
-        // MenuBarExtra 우선 앱이라 WindowGroup의 자동 표시가 환경에 따라 불확실하므로,
+        // 액세서리 모드일 수 있어 WindowGroup의 자동 표시가 환경에 따라 불확실하므로,
         // 테스트 결정성을 위해 첫 윈도우를 강제로 전면에 띄운다.
         if Self.shouldOpenMainWindowOnLaunch {
             Task { @MainActor in
