@@ -3,20 +3,25 @@ import XCTest
 
 @MainActor
 final class AppViewModelServerUpdateTests: XCTestCase {
-    private let testKey = "portbridge.servers"
+    private var suiteName: String!
+    private var defaults: UserDefaults!
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: testKey)
+        suiteName = "test.AppViewModelServerUpdateTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: testKey)
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        suiteName = nil
         super.tearDown()
     }
 
     func test_updateServer_refreshesVisibleSectionServerInfo() {
-        let store = ServerStore()
+        let store = ServerStore(defaults: defaults)
         let original = Server(name: "prod", user: "ubuntu", host: "old.example", port: 22)
         store.add(original)
         let vm = AppViewModel(store: store)

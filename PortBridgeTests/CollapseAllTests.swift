@@ -3,9 +3,25 @@ import XCTest
 
 @MainActor
 final class CollapseAllTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "test.CollapseAllTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        suiteName = nil
+        super.tearDown()
+    }
 
     private func makeVM(servers: [Server] = []) -> AppViewModel {
-        let store = ServerStore()
+        let store = ServerStore(defaults: defaults)
         for server in servers { store.add(server) }
         return AppViewModel(store: store)
     }

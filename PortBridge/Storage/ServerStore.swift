@@ -5,8 +5,10 @@ import Observation
 final class ServerStore {
     private(set) var servers: [Server] = []
     private let defaultsKey = "portbridge.servers"
+    private let defaults: UserDefaults
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         load()
     }
 
@@ -28,11 +30,11 @@ final class ServerStore {
 
     private func save() {
         guard let data = try? JSONEncoder().encode(servers) else { return }
-        UserDefaults.standard.set(data, forKey: defaultsKey)
+        defaults.set(data, forKey: defaultsKey)
     }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+        guard let data = defaults.data(forKey: defaultsKey),
               let decoded = try? JSONDecoder().decode([Server].self, from: data) else { return }
         servers = decoded
     }

@@ -16,7 +16,7 @@ enum PortBridgeError: LocalizedError, Equatable {
         case .sshConnectTimeout(let host):
             return "\(host) 연결 타임아웃."
         case .remoteCommandNotFound:
-            return "리모트에 ss/lsof 어느 쪽도 없습니다."
+            return "원격 서버에서 열린 포트 목록을 가져올 수 없습니다. (ss 또는 lsof 명령이 필요합니다)"
         case .scanOutputUnparseable(let preview):
             return "스캔 출력 파싱 실패: \(preview)"
         case .localPortInUse(let port):
