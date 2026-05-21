@@ -13,7 +13,7 @@ enum ServerScanState: Equatable {
 @MainActor
 @Observable
 final class ServerSectionViewModel: Identifiable {
-    let server: Server
+    private(set) var server: Server
     private(set) var scanState: ServerScanState = .idle
     private(set) var isExpanded: Bool = true
 
@@ -24,6 +24,10 @@ final class ServerSectionViewModel: Identifiable {
     init(server: Server, scanner: PortScanner = PortScanner(runner: ProcessCommandRunner())) {
         self.server = server
         self.scanner = scanner
+    }
+
+    func update(server: Server) {
+        self.server = server
     }
 
     var ports: [RemotePort] {

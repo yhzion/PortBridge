@@ -133,7 +133,11 @@ final class AppViewModel {
     private func rebuildSections() {
         let existing = Dictionary(uniqueKeysWithValues: serverSections.map { ($0.server.id, $0) })
         serverSections = store.servers.map { server in
-            existing[server.id] ?? ServerSectionViewModel(server: server, scanner: scanner)
+            if let section = existing[server.id] {
+                section.update(server: server)
+                return section
+            }
+            return ServerSectionViewModel(server: server, scanner: scanner)
         }
     }
 
