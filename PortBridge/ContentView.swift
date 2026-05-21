@@ -89,6 +89,26 @@ struct PortConflictSheet: View {
         _localPortText = State(initialValue: String(conflict.attemptedLocal + 1))
     }
 
+    /// 유효 로컬 포트: 1–65535이며 충돌난 포트와 달라야 함.
+    private var parsedPort: Int? {
+        guard let p = Int(localPortText.trimmingCharacters(in: .whitespaces)),
+              (1...65535).contains(p),
+              p != conflict.attemptedLocal else { return nil }
+        return p
+    }
+
+    private var validationMessage: String? {
+        let trimmed = localPortText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return nil }
+        guard let p = Int(trimmed), (1...65535).contains(p) else {
+            return "1–65535 범위의 숫자여야 합니다"
+        }
+        if p == conflict.attemptedLocal {
+            return "이미 사용 중인 포트 \(conflict.attemptedLocal)와(과) 달라야 합니다"
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(verbatim: "로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다")
@@ -98,15 +118,22 @@ struct PortConflictSheet: View {
                 .foregroundStyle(.secondary)
             TextField("로컬 포트", text: $localPortText)
                 .textFieldStyle(.roundedBorder)
+            if let message = validationMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             HStack {
                 Spacer()
                 Button("취소") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Button("연결") {
-                    if let port = Int(localPortText) {
+                    if let port = parsedPort {
                         onConfirm(port)
                         dismiss()
                     }
                 }
+                .disabled(parsedPort == nil)
                 .keyboardShortcut(.defaultAction)
             }
         }
