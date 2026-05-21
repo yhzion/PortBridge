@@ -86,8 +86,11 @@ final class TunnelManager: TunnelManaging {
             throw error
         }
 
-        try await Task.sleep(nanoseconds: 2_000_000_000)
-        if !process.isRunning {
+        let exitedEarly = await Self.raceExitVsGrace(
+            process: process,
+            graceNanoseconds: 2_000_000_000
+        )
+        if exitedEarly {
             stderrPipe.fileHandleForReading.readabilityHandler = nil
             stderrContinuation.finish()
             await stderrConsumer.value
@@ -158,6 +161,43 @@ final class TunnelManager: TunnelManaging {
                 cont.resume()
             }
         }
+    }
+
+    /// 시작 직후 SSH가 빨리 죽는 케이스(인증 실패, 포트 충돌)는 즉시 보고하고,
+    /// 그렇지 않으면 grace window까지만 기다린 뒤 정상 시작으로 간주합니다.
+    /// returns: true = grace 안에 종료(실패), false = grace 통과(성공)
+    private static func raceExitVsGrace(
+        process: Process,
+        graceNanoseconds: UInt64
+    ) async -> Bool {
+        // terminationHandler는 임의 스레드에서, sleep 분기는 우리 Task에서 발화 가능.
+        // 첫 호출만 cont.resume()을 통과시키는 one-shot 가드.
+        final class OneShot: @unchecked Sendable {
+            let lock = NSLock()
+            var fired = false
+            func claim() -> Bool {
+                lock.lock(); defer { lock.unlock() }
+                if fired { return false }
+                fired = true
+                return true
+            }
+        }
+        let gate = OneShot()
+        let exited: Bool = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            process.terminationHandler = { _ in
+                if gate.claim() { cont.resume(returning: true) }
+            }
+            if !process.isRunning, gate.claim() {
+                cont.resume(returning: true)
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: graceNanoseconds)
+                if gate.claim() { cont.resume(returning: false) }
+            }
+        }
+        // 호출자(monitorTask)가 자기 핸들러를 설치할 수 있도록 떼어둡니다.
+        process.terminationHandler = nil
+        return exited
     }
 }
 

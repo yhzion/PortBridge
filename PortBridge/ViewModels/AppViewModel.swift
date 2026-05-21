@@ -10,10 +10,16 @@ final class AppViewModel {
     private let tunnels: TunnelManaging
 
     private(set) var serverSections: [ServerSectionViewModel] = []
-    private(set) var forwardings: [Forwarding] = []
+    private(set) var forwardings: [Forwarding] = [] {
+        didSet { recomputeActiveForwardings() }
+    }
+    private(set) var activeForwardings: [Forwarding] = []
     var pendingPortConflict: PortConflict?
     private(set) var errors: [ErrorToast] = []
-    var searchText: String = ""
+    var searchText: String = "" {
+        didSet { normalizedSearchQuery = Self.normalize(searchText) }
+    }
+    private(set) var normalizedSearchQuery: String = ""
 
     private let errorDisplayDuration: TimeInterval = 5
     private let maxErrorsShown: Int = 3
@@ -35,11 +41,15 @@ final class AppViewModel {
     }
 
     func matches(_ port: RemotePort) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = normalizedSearchQuery
         guard !query.isEmpty else { return true }
         if String(port.port).contains(query) { return true }
         if let proc = port.processName?.lowercased(), proc.contains(query) { return true }
         return false
+    }
+
+    private static func normalize(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
     var allExpanded: Bool {
@@ -68,8 +78,8 @@ final class AppViewModel {
         rebuildSections()
     }
 
-    var activeForwardings: [Forwarding] {
-        forwardings
+    private func recomputeActiveForwardings() {
+        activeForwardings = forwardings
             .filter { fw in
                 switch fw.state {
                 case .active, .starting, .error: return true
@@ -99,7 +109,9 @@ final class AppViewModel {
 
     func updateServer(_ server: Server) {
         store.update(server)
-        rebuildSections()
+        serverSections
+            .first { $0.server.id == server.id }?
+            .update(server: server)
     }
 
     func deleteServer(_ server: Server) {
