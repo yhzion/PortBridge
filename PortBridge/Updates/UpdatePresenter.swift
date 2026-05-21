@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os.log
 
-enum AvailableUserChoice: Sendable {
+enum AvailableUserChoice {
     case download
     case skip
     case remindLater
