@@ -156,7 +156,9 @@ struct ServerListView: View {
                             Task { await vm.toggleForwarding(serverId: section.server.id, for: port) }
                         },
                         onEdit: { editingServer = section.server },
-                        onDelete: { pendingDelete = section.server }
+                        onDelete: { pendingDelete = section.server },
+                        isFavorite: { port in vm.isFavorite(serverId: section.server.id, port: port.port) },
+                        onFavoriteToggle: { port in vm.toggleFavorite(serverId: section.server.id, port: port.port) }
                     )
                 }
             }
@@ -173,7 +175,9 @@ struct ServerListView: View {
                 port: port,
                 forwarding: fw,
                 serverDisplayName: vm.serverDisplayName(for: fw.serverId),
-                onToggle: { Task { await vm.toggleForwarding(serverId: fw.serverId, for: port) } }
+                onToggle: { Task { await vm.toggleForwarding(serverId: fw.serverId, for: port) } },
+                isFavorite: vm.isFavorite(serverId: fw.serverId, port: port.port),
+                onFavoriteToggle: { vm.toggleFavorite(serverId: fw.serverId, port: port.port) }
             )
         }
     }
