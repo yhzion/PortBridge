@@ -282,3 +282,75 @@ private struct AuthFailedView: View {
         .padding(.vertical, 4)
     }
 }
+
+private struct ToolInstallGuideView: View {
+    private let commands: [(distro: String, command: String)] = [
+        ("Debian / Ubuntu", "sudo apt install iproute2 lsof"),
+        ("RHEL / CentOS",   "sudo yum install iproute lsof"),
+        ("Alpine",          "apk add iproute2 lsof"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("원격 서버에 ss 또는 lsof가 필요합니다", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+
+            Text("포트 목록을 조회하려면 둘 중 하나가 설치되어 있어야 합니다.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(commands, id: \.distro) { item in
+                    InstallCommandRow(distro: item.distro, command: item.command)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct InstallCommandRow: View {
+    let distro: String
+    let command: String
+    @State private var copied = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(distro)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(width: 100, alignment: .leading)
+
+            Text(command)
+                .font(.system(.caption, design: .monospaced))
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                .textSelection(.enabled)
+
+            Spacer(minLength: 0)
+
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.caption)
+                    .foregroundStyle(copied ? Color.green : Color.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .help(copied ? "복사됨" : "복사")
+            .accessibilityLabel(copied ? "복사됨" : "\(distro) 명령 복사")
+        }
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        withAnimation { copied = true }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            withAnimation { copied = false }
+        }
+    }
+}
