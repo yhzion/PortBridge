@@ -18,7 +18,10 @@ struct ContentView: View {
             get: { vm.pendingPortConflict },
             set: { vm.pendingPortConflict = $0 }
         )) { conflict in
-            PortConflictSheet(conflict: conflict) { newPort in
+            PortConflictSheet(
+                conflict: conflict,
+                serverDisplayName: vm.serverDisplayName(for: conflict.serverId)
+            ) { newPort in
                 Task { await vm.resolveConflict(with: newPort) }
             }
         }
@@ -74,12 +77,14 @@ struct ContentView: View {
 
 struct PortConflictSheet: View {
     let conflict: PortConflict
+    let serverDisplayName: String?
     let onConfirm: (Int) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var localPortText: String
 
-    init(conflict: PortConflict, onConfirm: @escaping (Int) -> Void) {
+    init(conflict: PortConflict, serverDisplayName: String?, onConfirm: @escaping (Int) -> Void) {
         self.conflict = conflict
+        self.serverDisplayName = serverDisplayName
         self.onConfirm = onConfirm
         _localPortText = State(initialValue: String(conflict.attemptedLocal + 1))
     }
@@ -88,7 +93,7 @@ struct PortConflictSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(verbatim: "로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다")
                 .font(.headline)
-            Text(verbatim: "다른 로컬 포트를 입력하세요. 리모트는 \(conflict.serverDisplayName):\(conflict.remotePort).")
+            Text(verbatim: "다른 로컬 포트를 입력하세요. 리모트는 \(serverDisplayName ?? "서버"):\(conflict.remotePort).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             TextField("로컬 포트", text: $localPortText)

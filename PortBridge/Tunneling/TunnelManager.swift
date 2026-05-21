@@ -57,28 +57,42 @@ final class TunnelManager {
         process.standardOutput = Pipe()
 
         let stderrBuffer = StderrRingBuffer()
+        let (stderrStream, stderrContinuation) = AsyncStream<Data>.makeStream()
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if data.isEmpty { return }
-            stderrBuffer.append(data)
+            stderrContinuation.yield(data)
+        }
+        let stderrConsumer = Task {
+            for await chunk in stderrStream {
+                await stderrBuffer.append(chunk)
+            }
         }
 
         try process.run()
 
         try await Task.sleep(nanoseconds: 2_000_000_000)
         if !process.isRunning {
-            let stderr = stderrBuffer.snapshot()
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            stderrContinuation.finish()
+            await stderrConsumer.value
+            let stderr = await stderrBuffer.snapshot()
             throw PortBridgeError.forwardingDiedEarly(stderr: stderr)
         }
 
         let forwarding = Forwarding(
             serverId: server.id,
-            serverDisplayName: server.displayName,
             remotePort: remotePort,
             localPort: localPort,
             state: .active
         )
-        let tunnel = ActiveTunnel(process: process, forwarding: forwarding, stderr: stderrBuffer)
+        let tunnel = ActiveTunnel(
+            id: forwarding.id,
+            process: process,
+            stderr: stderrBuffer,
+            stderrContinuation: stderrContinuation,
+            stderrConsumer: stderrConsumer
+        )
         active[forwarding.id] = tunnel
 
         let id = forwarding.id
@@ -92,15 +106,19 @@ final class TunnelManager {
 
     func stop(_ id: UUID) {
         guard let tunnel = active[id] else { return }
+        (tunnel.process.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
         tunnel.monitorTask?.cancel()
         tunnel.process.terminate()
+        tunnel.stderrContinuation.finish()
         active.removeValue(forKey: id)
     }
 
     func shutdownAll() {
         for (_, tunnel) in active {
+            (tunnel.process.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
             tunnel.monitorTask?.cancel()
             tunnel.process.terminate()
+            tunnel.stderrContinuation.finish()
         }
         for (_, tunnel) in active {
             tunnel.process.waitUntilExit()
@@ -110,7 +128,10 @@ final class TunnelManager {
 
     private func handleTunnelExit(id: UUID) async {
         guard let tunnel = active[id] else { return }
-        let stderr = tunnel.stderr.snapshot()
+        (tunnel.process.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
+        tunnel.stderrContinuation.finish()
+        await tunnel.stderrConsumer.value
+        let stderr = await tunnel.stderr.snapshot()
         active.removeValue(forKey: id)
         await delegate?.tunnelDidExit(id: id, stderr: stderr)
     }
@@ -131,25 +152,33 @@ protocol TunnelManagerDelegate: AnyObject {
 }
 
 final class ActiveTunnel {
+    let id: UUID
     let process: Process
-    var forwarding: Forwarding
     let stderr: StderrRingBuffer
+    let stderrContinuation: AsyncStream<Data>.Continuation
+    let stderrConsumer: Task<Void, Never>
     var monitorTask: Task<Void, Never>?
 
-    init(process: Process, forwarding: Forwarding, stderr: StderrRingBuffer) {
+    init(
+        id: UUID,
+        process: Process,
+        stderr: StderrRingBuffer,
+        stderrContinuation: AsyncStream<Data>.Continuation,
+        stderrConsumer: Task<Void, Never>
+    ) {
+        self.id = id
         self.process = process
-        self.forwarding = forwarding
         self.stderr = stderr
+        self.stderrContinuation = stderrContinuation
+        self.stderrConsumer = stderrConsumer
     }
 }
 
-final class StderrRingBuffer: @unchecked Sendable {
+actor StderrRingBuffer {
     private let maxBytes = 4 * 1024
     private var buffer = Data()
-    private let lock = NSLock()
 
     func append(_ data: Data) {
-        lock.lock(); defer { lock.unlock() }
         buffer.append(data)
         if buffer.count > maxBytes {
             buffer.removeFirst(buffer.count - maxBytes)
@@ -157,7 +186,6 @@ final class StderrRingBuffer: @unchecked Sendable {
     }
 
     func snapshot() -> String {
-        lock.lock(); defer { lock.unlock() }
-        return String(data: buffer, encoding: .utf8) ?? ""
+        String(data: buffer, encoding: .utf8) ?? ""
     }
 }

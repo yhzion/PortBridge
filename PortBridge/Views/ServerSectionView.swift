@@ -68,7 +68,7 @@ struct ServerSectionView: View {
 
         case .loaded:
             ForEach(inactivePorts) { port in
-                ForwardingRowView(port: port, forwarding: nil, onToggle: { onToggle(port) })
+                ForwardingRowView(port: port, forwarding: nil, serverDisplayName: nil, onToggle: { onToggle(port) })
             }
 
         case .offline:

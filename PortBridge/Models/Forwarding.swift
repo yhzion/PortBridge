@@ -10,24 +10,24 @@ nonisolated struct Forwarding: Identifiable, Equatable {
 
     let id: UUID
     let serverId: UUID
-    let serverDisplayName: String
     let remotePort: Int
     var localPort: Int
     var state: State
+    var activatedAt: Date?
 
     init(
         id: UUID = UUID(),
         serverId: UUID,
-        serverDisplayName: String,
         remotePort: Int,
         localPort: Int,
-        state: State
+        state: State,
+        activatedAt: Date? = nil
     ) {
         self.id = id
         self.serverId = serverId
-        self.serverDisplayName = serverDisplayName
         self.remotePort = remotePort
         self.localPort = localPort
         self.state = state
+        self.activatedAt = activatedAt
     }
 }
