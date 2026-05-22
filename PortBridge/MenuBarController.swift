@@ -8,12 +8,6 @@ import SwiftUI
 /// - 우클릭: 즐겨찾기 일괄 토글 (Amphetamine 패턴)
 ///
 /// 아이콘은 isAnyFavoriteActive 파생 상태가 바뀔 때마다 자동 갱신됩니다.
-extension Notification.Name {
-    /// 메뉴바 또는 외부 소스에서 메인 윈도우를 열어달라고 요청할 때 게시.
-    /// ContentView가 .onReceive로 받아 openWindow(id: "main")을 호출합니다.
-    static let openPortBridgeMainWindow = Notification.Name("PortBridge.openMainWindow")
-}
-
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let viewModel: AppViewModel
@@ -253,12 +247,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openMainWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        if let win = NSApp.windows.first(where: { $0.canBecomeMain }) {
-            win.makeKeyAndOrderFront(nil)
-        } else {
-            NotificationCenter.default.post(name: .openPortBridgeMainWindow, object: nil)
-        }
+        (NSApp.delegate as? AppDelegate)?.showMainWindow()
     }
 
     @objc private func quit() {
