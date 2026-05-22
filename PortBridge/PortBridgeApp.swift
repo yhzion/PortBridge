@@ -6,27 +6,25 @@ struct PortBridgeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
+        // WindowGroup 자체는 SwiftUI App이 자신을 *windowed app*으로 분류하도록 두지만,
+        // macOS 26 / SwiftUI 7 + NSApplicationDelegateAdaptor 조합에서는 launch 시 첫
+        // 윈도우가 자동 인스턴스화되지 않습니다. 실제 메인 윈도우 표시는
+        // AppDelegate.showMainWindow(AppKit NSWindow + NSHostingController)가 맡습니다.
         WindowGroup(id: "main") {
             MainContentHost(viewModel: delegate.viewModel)
         }
         .commands {
-            // ⌘N은 ServerListView에서 "서버 추가"에 사용하므로 기본 "새 창" 바인딩 해제.
             CommandGroup(replacing: .newItem) {}
         }
     }
 }
 
-/// WindowGroup의 루트. openWindow 환경값을 얻어 메뉴바의 "Open Main Window" 알림에 반응합니다.
 private struct MainContentHost: View {
     let viewModel: AppViewModel
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ContentView()
             .environment(viewModel)
-            .onReceive(NotificationCenter.default.publisher(for: .openPortBridgeMainWindow)) { _ in
-                openWindow(id: "main")
-            }
     }
 }
 
@@ -34,6 +32,7 @@ private struct MainContentHost: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let viewModel: AppViewModel
     private var menuBarController: MenuBarController?
+    private var mainWindow: NSWindow?
 
     override init() {
         if !Self.isRunningUnderTest {
@@ -70,17 +69,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await viewModel.updates.checkIfDue()
         }
 
-        // UI 테스트가 메인 윈도우 표시를 명시 요청한 경우 (LaunchSmokeTests 참조).
-        // 액세서리 모드일 수 있어 WindowGroup의 자동 표시가 환경에 따라 불확실하므로,
-        // 테스트 결정성을 위해 첫 윈도우를 강제로 전면에 띄운다.
         if Self.shouldOpenMainWindowOnLaunch {
-            Task { @MainActor in
-                // SwiftUI scene이 WindowGroup 윈도우를 생성할 시간을 짧게 확보.
-                try? await Task.sleep(for: .milliseconds(200))
-                NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
-            }
+            showMainWindow()
         }
+    }
+
+    /// 메인 윈도우를 표시합니다. 처음 호출 시 AppKit NSWindow를 만들고 ContentView를
+    /// NSHostingController로 호스팅하며, 이후 호출은 같은 인스턴스를 재사용합니다.
+    ///
+    /// macOS 26 / SwiftUI 7에서는 NSApplicationDelegateAdaptor와 함께 사용 시
+    /// WindowGroup이 launch 시 자동 윈도우를 만들지 않는 동작을 우회하기 위해
+    /// AppKit으로 직접 호스팅합니다. 사용자가 메뉴바를 통해 호출(user gesture)하므로
+    /// `NSApp.activate()`가 정상 동작합니다.
+    func showMainWindow() {
+        if mainWindow == nil {
+            let host = NSHostingController(rootView: ContentView().environment(viewModel))
+            let window = NSWindow(contentViewController: host)
+            window.title = "PortBridge"
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.setContentSize(NSSize(width: 900, height: 600))
+            window.center()
+            window.isReleasedWhenClosed = false
+            mainWindow = window
+        }
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        mainWindow?.makeKeyAndOrderFront(nil)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
