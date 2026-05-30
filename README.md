@@ -67,11 +67,36 @@ Or in Finder, right-click `PortBridge.app` → **Open** → **Open**.
 
 ## Build from source
 
+### macOS app
+
 ```bash
-./install.sh
+apps/macos/install.sh
 ```
 
 Requires Xcode. Builds Release, ad-hoc signs, and installs to `/Applications/PortBridge.app`.
+
+### Rust workspace (core + CLI)
+
+```bash
+cargo build --workspace
+```
+
+Builds the shared core and the `portbridge` CLI. Requires a Rust toolchain.
+
+## Repository structure
+
+PortBridge is a polyglot monorepo. Platform-independent logic lives in a Rust core that is shared across the CLI, the macOS app (via FFI bindings), and future desktop targets.
+
+| Path | Language | Purpose |
+|------|----------|---------|
+| `crates/portbridge-core/` | Rust | Platform-independent core logic (port scanning, parsing, error classification) |
+| `crates/portbridge-cli/` | Rust | Cross-platform CLI — the `portbridge` binary (e.g. `portbridge scan user@host`) |
+| `crates/portbridge-ffi/` | Rust | UniFFI bindings exposing the core to Swift and future Tauri targets |
+| `apps/macos/` | Swift | macOS menu bar app (the shipping product) |
+| `docs/` | — | Architecture, conventions, and design specs |
+| `.github/` | — | CI workflows |
+
+Coding conventions and the ownership-zone model that enables parallel work are documented in [AGENTS.md](AGENTS.md).
 
 ## Privacy
 
