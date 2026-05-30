@@ -10,13 +10,6 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn display_name(&self) -> String {
-        self.name
-            .as_ref()
-            .map(|name| format!("{name} ({})", self.host))
-            .unwrap_or_else(|| self.host.clone())
-    }
-
     pub fn ssh_target(&self) -> String {
         format!("{}@{}", self.user, self.host)
     }
@@ -66,16 +59,6 @@ mod tests {
             host: "10.0.0.1".to_string(),
             port: 2222,
         }
-    }
-
-    #[test]
-    fn server_display_name_with_name_shows_name_and_host() {
-        assert_eq!(server(Some("prod")).display_name(), "prod (10.0.0.1)");
-    }
-
-    #[test]
-    fn server_display_name_without_name_shows_host_only() {
-        assert_eq!(server(None).display_name(), "10.0.0.1");
     }
 
     #[test]
