@@ -1,13 +1,10 @@
 [package]
 name = "portbridge-ffi"
 version = "0.0.0"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 publish = false
-
-# 빈 [workspace] 테이블로 이 spike 크레이트를 루트 PortBridge 워크스페이스에서 분리(detach)한다.
-# → cargo가 루트로 walk-up 하지 않아 루트 Cargo.toml/Cargo.lock을 건드리지 않는다.
-#   (정식 워크스페이스 등록은 #56 REG-FFI 소관. 이 spike는 standalone 빌드로만 검증.)
-[workspace]
 
 [lib]
 crate-type = ["cdylib", "staticlib", "lib"]
