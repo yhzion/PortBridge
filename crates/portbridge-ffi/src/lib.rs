@@ -46,10 +46,14 @@ impl From<PortBridgeError> for PortBridgeFfiError {
                 PortBridgeFfiError::ServerUnreachable { host, reason }
             }
             PortBridgeError::RemoteToolsMissing => PortBridgeFfiError::RemoteToolsMissing,
-            // scan_ports는 스캔 에러만 반환한다 — 터널(ForwardingDiedEarly)은 이 FFI
-            // 경계에 도달하지 않는다. 정식 FFI 노출은 #58(ffi 바인딩) 소관.
+            // scan_ports는 스캔 에러만 반환한다 — 터널(ForwardingDiedEarly)·ssh-config
+            // 해석(#51, cli/#52 소비) 에러는 이 FFI 경계에 도달하지 않는다. 정식 FFI
+            // 노출은 #58(ffi 바인딩) 소관. core 열거형 확장 시 동반 갱신(#65 결합).
             PortBridgeError::ForwardingDiedEarly { .. } => {
                 unreachable!("scan_ports never emits ForwardingDiedEarly")
+            }
+            PortBridgeError::SshConfigNotFound | PortBridgeError::SshConfigUnreadable { .. } => {
+                unreachable!("scan_ports never emits ssh-config errors")
             }
         }
     }

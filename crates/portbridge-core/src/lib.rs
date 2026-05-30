@@ -3,6 +3,7 @@
 pub mod model;
 pub mod platform;
 pub mod scan;
+pub mod ssh_config;
 
 /// 코어 크레이트의 패키지 버전을 반환한다.
 pub fn version() -> &'static str {
