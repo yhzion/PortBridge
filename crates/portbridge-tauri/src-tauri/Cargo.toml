@@ -1,0 +1,29 @@
+# 루트 워크스페이스와 분리된 자체 워크스페이스 — 단독 빌드 가능(루트 Cargo.toml은
+# #57이 members에 등록할 때 수정). portbridge-core는 외부 path 의존으로 소비한다.
+[workspace]
+
+[package]
+name = "portbridge-tauri"
+version = "0.1.0"
+description = "PortBridge desktop (Tauri v2) — Win/Linux"
+authors = ["PortBridge"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "portbridge_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+portbridge-core = { path = "../../portbridge-core" }
+
