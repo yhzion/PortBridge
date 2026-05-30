@@ -11,7 +11,9 @@ use std::time::{Duration, Instant};
 use clap::Parser;
 
 use portbridge_core::model::{RemotePort, Server};
+use portbridge_core::platform::HostPlatform;
 use portbridge_core::scan::{self, CommandError, CommandResult, CommandRunner};
+use portbridge_core::ssh_config::{resolve_host, ResolvedHost};
 
 // ── ProcessRunner: std::process::Command 기반 CommandRunner 구현 ──────────
 
@@ -97,12 +99,12 @@ struct Cli {
 enum Commands {
     /// 원격 서버의 수신 포트를 스캔한다
     Scan {
-        /// SSH 접속 대상 (user@host)
+        /// SSH 접속 대상: `user@host` 또는 `~/.ssh/config`의 Host alias
         target: String,
 
-        /// SSH 포트
-        #[arg(short, long, default_value_t = 22)]
-        port: u16,
+        /// SSH 포트 (미지정 시 alias의 config Port, 그것도 없으면 22)
+        #[arg(short, long)]
+        port: Option<u16>,
 
         /// 스캔할 포트 범위 (예: 3000-9000). 생략 시 1000-65535
         #[arg(long)]
@@ -126,8 +128,8 @@ fn main() {
             range,
             json,
         } => {
-            let (user, host) = split_target(&target).unwrap_or_else(|| {
-                eprintln!("error: target must be in user@host format");
+            let server = build_scan_server(&target, port).unwrap_or_else(|msg| {
+                eprintln!("error: {msg}");
                 std::process::exit(1);
             });
 
@@ -135,14 +137,6 @@ fn main() {
                 eprintln!("error: {msg}");
                 std::process::exit(1);
             });
-
-            let server = Server {
-                id: format!("{user}@{host}"),
-                name: None,
-                user,
-                host,
-                port,
-            };
 
             let runner = ProcessRunner;
             match scan::scan(&runner, &server, port_range) {
@@ -163,6 +157,55 @@ fn main() {
 }
 
 // ── 유틸리티 ────────────────────────────────────────────────────────────
+
+/// 스캔 대상을 `Server`로 해석한다.
+///
+/// `@` 포함 → `user@host` 직접 입력. bare 토큰 → `~/.ssh/config`의 Host alias로
+/// core `resolve_host`를 **소비**해 구성한다(cli는 ssh-config를 직접 파싱하지 않음, §7.3).
+fn build_scan_server(target: &str, explicit_port: Option<u16>) -> Result<Server, String> {
+    if target.contains('@') {
+        let (user, host) =
+            split_target(target).ok_or_else(|| "target must be in user@host format".to_string())?;
+        Ok(Server {
+            id: format!("{user}@{host}"),
+            name: None,
+            user,
+            host,
+            port: explicit_port.unwrap_or(22),
+        })
+    } else {
+        match resolve_host(&HostPlatform, target) {
+            Ok(Some(resolved)) => server_from_resolved(target, resolved, explicit_port),
+            Ok(None) => Err(format!(
+                "no Host alias '{target}' in ~/.ssh/config (use user@host)"
+            )),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+}
+
+/// 해석된 alias로부터 `Server`를 구성한다(순수).
+///
+/// 포트 우선순위: 명시 `-p` > config `Port` > 22. `HostName` 생략 시 alias를 host로
+/// 사용(ssh 관례). `User` 생략 시 `Server.user`를 추측하지 않고 에러로 종료한다.
+fn server_from_resolved(
+    alias: &str,
+    resolved: ResolvedHost,
+    explicit_port: Option<u16>,
+) -> Result<Server, String> {
+    let user = resolved
+        .user
+        .ok_or_else(|| format!("Host alias '{alias}' has no User (use user@host)"))?;
+    let host = resolved.hostname.unwrap_or_else(|| alias.to_string());
+    let port = explicit_port.or(resolved.port).unwrap_or(22);
+    Ok(Server {
+        id: format!("{user}@{host}"),
+        name: Some(alias.to_string()),
+        user,
+        host,
+        port,
+    })
+}
 
 /// `user@host` 문자열을 `(user, host)`로 분리.
 fn split_target(target: &str) -> Option<(String, String)> {
@@ -255,6 +298,82 @@ fn push_json_string(out: &mut String, s: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── scan target 해석 (alias → Server) ──────────────────────────────────
+
+    fn resolved(hostname: Option<&str>, user: Option<&str>, port: Option<u16>) -> ResolvedHost {
+        ResolvedHost {
+            hostname: hostname.map(str::to_string),
+            user: user.map(str::to_string),
+            port,
+            identity_file: None,
+        }
+    }
+
+    #[test]
+    fn resolved_alias_maps_fields_and_uses_config_port() {
+        let server = server_from_resolved(
+            "prod",
+            resolved(Some("10.0.0.1"), Some("ubuntu"), Some(2222)),
+            None,
+        )
+        .unwrap();
+        assert_eq!(server.host, "10.0.0.1");
+        assert_eq!(server.user, "ubuntu");
+        assert_eq!(server.port, 2222);
+        assert_eq!(server.name.as_deref(), Some("prod"));
+    }
+
+    #[test]
+    fn explicit_port_overrides_config_port() {
+        let server = server_from_resolved(
+            "prod",
+            resolved(Some("h"), Some("u"), Some(2222)),
+            Some(2022),
+        )
+        .unwrap();
+        assert_eq!(server.port, 2022);
+    }
+
+    #[test]
+    fn no_config_port_and_no_explicit_defaults_to_22() {
+        let server =
+            server_from_resolved("prod", resolved(Some("h"), Some("u"), None), None).unwrap();
+        assert_eq!(server.port, 22);
+    }
+
+    #[test]
+    fn omitted_hostname_uses_alias_as_host() {
+        let server =
+            server_from_resolved("myalias", resolved(None, Some("u"), None), None).unwrap();
+        assert_eq!(server.host, "myalias");
+    }
+
+    #[test]
+    fn omitted_user_is_error() {
+        let err = server_from_resolved("prod", resolved(Some("h"), None, None), None).unwrap_err();
+        assert!(err.contains("User"));
+    }
+
+    #[test]
+    fn user_host_target_builds_server_with_default_port() {
+        let server = build_scan_server("deploy@10.0.0.1", None).unwrap();
+        assert_eq!(server.user, "deploy");
+        assert_eq!(server.host, "10.0.0.1");
+        assert_eq!(server.port, 22);
+        assert_eq!(server.name, None);
+    }
+
+    #[test]
+    fn user_host_target_uses_explicit_port() {
+        let server = build_scan_server("deploy@10.0.0.1", Some(2022)).unwrap();
+        assert_eq!(server.port, 2022);
+    }
+
+    #[test]
+    fn malformed_user_host_target_is_error() {
+        assert!(build_scan_server("@host", None).is_err());
+    }
 
     // ── split_target ─────────────────────────────────────────────────────
 
