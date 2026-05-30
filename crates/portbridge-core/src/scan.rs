@@ -10,6 +10,8 @@ const REMOTE_SCAN_COMMAND: &str = r#"if ! command -v ss >/dev/null 2>&1 && ! com
 fi
 ss -tlnpH 2>/dev/null || lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null"#;
 
+pub const DEFAULT_PORT_RANGE: RangeInclusive<u16> = 1000..=65535;
+
 pub trait CommandRunner {
     fn run(
         &self,
@@ -131,12 +133,12 @@ fn parse_lsof_line(index: usize, raw: &str) -> Option<RemotePort> {
     }
 
     let columns: Vec<_> = line.split_whitespace().collect();
-    if columns.len() < 10 {
+    if columns.len() < 9 {
         return None;
     }
 
     let command = columns[0];
-    let name = columns[8].replace('*', "0.0.0.0");
+    let name = columns[columns.len() - 2].replace('*', "0.0.0.0");
     let (address, port) = split_address_port(&name)?;
     let process_name = (command != "-").then(|| command.to_string());
 
@@ -343,6 +345,13 @@ mod tests {
     }
 
     #[test]
+    fn default_port_range_matches_swift_scan_default() {
+        assert!(DEFAULT_PORT_RANGE.contains(&1000));
+        assert!(DEFAULT_PORT_RANGE.contains(&65535));
+        assert!(!DEFAULT_PORT_RANGE.contains(&999));
+    }
+
+    #[test]
     fn parse_ss_no_header_extracts_listening_ports() {
         let output = "\
 LISTEN 0 128 0.0.0.0:22 0.0.0.0:*
@@ -424,6 +433,21 @@ nginx    200 www-data 6u IPv6  34567      0t0  TCP [::]:80 (LISTEN)
     }
 
     #[test]
+    fn parse_lsof_accepts_omitted_size_offset_column() {
+        let output = "\
+COMMAND  PID USER   FD   TYPE DEVICE NODE NAME
+postgres 100 postgres 5u IPv4  23456  TCP 127.0.0.1:5432 (LISTEN)
+";
+
+        let ports = parse_lsof(output);
+
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].port, 5432);
+        assert_eq!(ports[0].address, "127.0.0.1");
+        assert_eq!(ports[0].process_name.as_deref(), Some("postgres"));
+    }
+
+    #[test]
     fn parse_lsof_dash_process_becomes_none() {
         let output = "\
 COMMAND  PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
@@ -445,7 +469,7 @@ COMMAND  PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
             "",
         ));
 
-        let ports = scan(&runner, &server(), 1000..=65535).expect("scan should succeed");
+        let ports = scan(&runner, &server(), DEFAULT_PORT_RANGE).expect("scan should succeed");
 
         assert_eq!(ports.len(), 2);
         assert!(ports.iter().any(|port| port.port == 3000));
@@ -464,7 +488,7 @@ postgres 100 postgres 5u IPv4  23456      0t0  TCP 127.0.0.1:5432 (LISTEN)
             "",
         ));
 
-        let ports = scan(&runner, &server(), 1000..=65535).expect("scan should succeed");
+        let ports = scan(&runner, &server(), DEFAULT_PORT_RANGE).expect("scan should succeed");
 
         assert_eq!(ports.len(), 1);
         assert_eq!(ports[0].port, 5432);
@@ -480,7 +504,7 @@ postgres 100 postgres 5u IPv4  23456      0t0  TCP 127.0.0.1:5432 (LISTEN)
             "",
         ));
 
-        let ports = scan(&runner, &server(), 1000..=65535).expect("scan should succeed");
+        let ports = scan(&runner, &server(), DEFAULT_PORT_RANGE).expect("scan should succeed");
 
         assert_eq!(ports.len(), 1);
         assert_eq!(ports[0].port, 3000);
@@ -497,7 +521,7 @@ LISTEN 0 4096 [::]:8000 [::]:* users:((\"vllm\",pid=1,fd=4))
             "",
         ));
 
-        let ports = scan(&runner, &server(), 1000..=65535).expect("scan should succeed");
+        let ports = scan(&runner, &server(), DEFAULT_PORT_RANGE).expect("scan should succeed");
 
         assert_eq!(ports.len(), 1);
         assert_eq!(ports[0].port, 8000);
@@ -516,7 +540,7 @@ LISTEN 0 4096 [::1]:8000 [::]:*
             "",
         ));
 
-        let ports = scan(&runner, &server(), 1000..=65535).expect("scan should succeed");
+        let ports = scan(&runner, &server(), DEFAULT_PORT_RANGE).expect("scan should succeed");
 
         assert_eq!(ports.len(), 1);
         assert_eq!(ports[0].address, "127.0.0.1");
@@ -533,7 +557,7 @@ LISTEN 0 4096 [::1]:8000 [::]:*
         };
         let runner = MockRunner::with_result(command_result(0, "", ""));
 
-        let _ = scan(&runner, &custom_server, 1000..=65535).expect("scan should succeed");
+        let _ = scan(&runner, &custom_server, DEFAULT_PORT_RANGE).expect("scan should succeed");
 
         let calls = runner.calls.borrow();
         let call = calls.first().expect("runner should be called");
@@ -554,7 +578,7 @@ LISTEN 0 4096 [::1]:8000 [::]:*
             MockRunner::with_result(command_result(255, "", "Permission denied (publickey)."));
 
         assert_eq!(
-            scan(&runner, &server(), 1000..=65535),
+            scan(&runner, &server(), DEFAULT_PORT_RANGE),
             Err(PortBridgeError::SshAuthFailed {
                 host: "prod".to_string(),
             })
@@ -576,7 +600,7 @@ LISTEN 0 4096 [::1]:8000 [::]:*
         for stderr in patterns {
             let runner = MockRunner::with_result(command_result(255, "", stderr));
             assert!(matches!(
-                scan(&runner, &server(), 1000..=65535),
+                scan(&runner, &server(), DEFAULT_PORT_RANGE),
                 Err(PortBridgeError::ServerUnreachable { host, .. }) if host == "prod"
             ));
         }
@@ -590,7 +614,7 @@ LISTEN 0 4096 [::1]:8000 [::]:*
         ] {
             let runner = MockRunner::with_result(result);
             assert_eq!(
-                scan(&runner, &server(), 1000..=65535),
+                scan(&runner, &server(), DEFAULT_PORT_RANGE),
                 Err(PortBridgeError::RemoteToolsMissing)
             );
         }
@@ -601,7 +625,7 @@ LISTEN 0 4096 [::1]:8000 [::]:*
         let runner = MockRunner::with_result(command_result(0, "", ""));
 
         assert_eq!(
-            scan(&runner, &server(), 1000..=65535).expect("scan should succeed"),
+            scan(&runner, &server(), DEFAULT_PORT_RANGE).expect("scan should succeed"),
             Vec::<RemotePort>::new()
         );
     }
@@ -614,7 +638,7 @@ LISTEN 0 4096 [::1]:8000 [::]:*
         ] {
             let runner = MockRunner::with_error(error);
             assert!(matches!(
-                scan(&runner, &server(), 1000..=65535),
+                scan(&runner, &server(), DEFAULT_PORT_RANGE),
                 Err(PortBridgeError::ServerUnreachable { host, .. }) if host == "prod"
             ));
         }
