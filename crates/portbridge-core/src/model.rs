@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, time::SystemTime};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Server {
@@ -22,11 +22,32 @@ pub struct RemotePort {
     pub process_name: Option<String>,
 }
 
+/// 터널(포워딩) 수명주기 상태. Swift `Forwarding.State` 매핑.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum State {
+    Idle,
+    Starting,
+    Active,
+    Error(String),
+}
+
+/// 로컬↔원격 포트 매핑(터널) 도메인 타입. Swift `Forwarding` 매핑.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Forwarding {
+    pub id: String,
+    pub server_id: String,
+    pub remote_port: u16,
+    pub local_port: u16,
+    pub state: State,
+    pub activated_at: Option<SystemTime>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PortBridgeError {
     SshAuthFailed { host: String },
     ServerUnreachable { host: String, reason: String },
     RemoteToolsMissing,
+    ForwardingDiedEarly { stderr: String },
 }
 
 impl fmt::Display for PortBridgeError {
@@ -40,6 +61,9 @@ impl fmt::Display for PortBridgeError {
             }
             Self::RemoteToolsMissing => {
                 write!(f, "remote server requires ss or lsof")
+            }
+            Self::ForwardingDiedEarly { stderr } => {
+                write!(f, "forwarding died early: {stderr}")
             }
         }
     }
@@ -99,6 +123,54 @@ mod tests {
         assert_eq!(
             PortBridgeError::RemoteToolsMissing.to_string(),
             "remote server requires ss or lsof"
+        );
+    }
+
+    // ── 터널 도메인: State ────────────────────────────────────────────────
+
+    #[test]
+    fn state_distinguishes_active_from_error() {
+        assert_ne!(State::Active, State::Error("boom".to_string()));
+    }
+
+    #[test]
+    fn state_error_preserves_reason() {
+        match State::Error("connection refused".to_string()) {
+            State::Error(reason) => assert_eq!(reason, "connection refused"),
+            other => panic!("expected Error variant, got {other:?}"),
+        }
+    }
+
+    // ── 터널 도메인: Forwarding ───────────────────────────────────────────
+
+    #[test]
+    fn forwarding_preserves_all_fields() {
+        let activated = std::time::SystemTime::UNIX_EPOCH;
+        let forwarding = Forwarding {
+            id: "fwd-1".to_string(),
+            server_id: "server-1".to_string(),
+            remote_port: 5432,
+            local_port: 15432,
+            state: State::Active,
+            activated_at: Some(activated),
+        };
+
+        assert_eq!(forwarding.id, "fwd-1");
+        assert_eq!(forwarding.server_id, "server-1");
+        assert_eq!(forwarding.remote_port, 5432);
+        assert_eq!(forwarding.local_port, 15432);
+        assert_eq!(forwarding.state, State::Active);
+        assert_eq!(forwarding.activated_at, Some(activated));
+    }
+
+    #[test]
+    fn port_bridge_error_display_covers_forwarding_died_early() {
+        assert_eq!(
+            PortBridgeError::ForwardingDiedEarly {
+                stderr: "bind: address already in use".to_string(),
+            }
+            .to_string(),
+            "forwarding died early: bind: address already in use"
         );
     }
 }
