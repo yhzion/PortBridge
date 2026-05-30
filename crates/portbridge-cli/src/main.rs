@@ -3,10 +3,10 @@
 //! 프로세스 실행·인자 파싱·출력 포매팅만 담당하는 얇은 어댑터.
 //! 모든 로직(파싱, 에러 분류, 중복 제거, 필터링)은 core에 위임한다.
 
+use std::io::Read;
 use std::ops::RangeInclusive;
 use std::process::Command;
-use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 
@@ -17,8 +17,10 @@ use portbridge_core::scan::{self, CommandError, CommandResult, CommandRunner};
 
 /// `std::process::Command`로 실제 프로세스를 실행하는 어댑터.
 ///
-/// 단발 실행 CLI 전제 — 타임아웃 시 자식 프로세스를 kill하지 않고 스레드를 버린다.
-/// 장수명 프로세스(tauri/daemon)에서 재사용하려면 `Child::kill()` 처리가 필요하다.
+/// 타임아웃 시 자식을 `Child::kill()`로 회수하고 `wait()`로 좀비를 거둔다.
+/// stdout/stderr는 별도 스레드에서 드레인해 파이프 버퍼 포화 데드락을 막는다.
+///
+/// `kill()`은 직계 자식만 종료한다 — 프로세스 그룹 회수·grace-window는 #41 범위.
 struct ProcessRunner;
 
 impl CommandRunner for ProcessRunner {
@@ -28,32 +30,56 @@ impl CommandRunner for ProcessRunner {
         args: &[&str],
         timeout: Duration,
     ) -> Result<CommandResult, CommandError> {
-        let (tx, rx) = mpsc::channel();
+        let mut child = Command::new(executable)
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| CommandError::LaunchFailed(e.to_string()))?;
 
-        let exec = executable.to_string();
-        let args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
-
-        std::thread::spawn(move || {
-            let result = Command::new(&exec)
-                .args(&args)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output();
-            let _ = tx.send(result);
+        // stdout/stderr를 별도 스레드에서 드레인 — 파이프 버퍼 포화 데드락 방지.
+        let mut stdout_pipe = child.stdout.take().expect("stdout piped");
+        let mut stderr_pipe = child.stderr.take().expect("stderr piped");
+        let stdout_handle = std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = stdout_pipe.read_to_end(&mut buf);
+            buf
+        });
+        let stderr_handle = std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = stderr_pipe.read_to_end(&mut buf);
+            buf
         });
 
-        match rx.recv_timeout(timeout) {
-            Ok(output_result) => {
-                let output =
-                    output_result.map_err(|e| CommandError::LaunchFailed(e.to_string()))?;
-                Ok(CommandResult {
-                    exit_code: output.status.code().unwrap_or(-1),
-                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                })
+        // try_wait 폴링으로 타임아웃을 감지한다.
+        let deadline = Instant::now() + timeout;
+        let exit_status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        // 타임아웃: 자식을 kill하고 좀비를 wait로 회수한다.
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        // 파이프가 닫히며 드레인 스레드도 종료된다 — join으로 회수.
+                        let _ = stdout_handle.join();
+                        let _ = stderr_handle.join();
+                        return Err(CommandError::TimedOut);
+                    }
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(e) => return Err(CommandError::LaunchFailed(e.to_string())),
             }
-            Err(_) => Err(CommandError::TimedOut),
-        }
+        };
+
+        let stdout = stdout_handle.join().unwrap_or_default();
+        let stderr = stderr_handle.join().unwrap_or_default();
+
+        Ok(CommandResult {
+            exit_code: exit_status.code().unwrap_or(-1),
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+        })
     }
 }
 
@@ -249,5 +275,74 @@ mod tests {
     #[test]
     fn parse_range_equal_bounds() {
         assert_eq!(parse_range(Some("8080-8080")), Ok(8080..=8080));
+    }
+
+    // ── ProcessRunner ────────────────────────────────────────────────────
+
+    /// 타임아웃 시 자식 프로세스를 회수(kill)하는지 검증.
+    ///
+    /// 자식이 살아남으면 1초 뒤 marker 파일을 touch한다. 짧은 타임아웃 후
+    /// 충분히 기다려도 marker가 없으면 자식이 종료된 것이다.
+    /// `sleep` 의존이라 unix 한정.
+    #[cfg(unix)]
+    #[test]
+    fn run_kills_child_on_timeout() {
+        let marker =
+            std::env::temp_dir().join(format!("pb_kill_test_{}.marker", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+
+        let script = format!("sleep 1; touch '{}'", marker.display());
+        let result = ProcessRunner.run("sh", &["-c", &script], Duration::from_millis(100));
+
+        assert!(
+            matches!(result, Err(CommandError::TimedOut)),
+            "타임아웃은 TimedOut을 반환해야 한다: {result:?}"
+        );
+
+        // 자식이 살아있었다면 ~1초 후 touch한다. 넉넉히 기다린다.
+        std::thread::sleep(Duration::from_millis(1500));
+        let child_survived = marker.exists();
+        let _ = std::fs::remove_file(&marker);
+
+        assert!(
+            !child_survived,
+            "타임아웃된 자식이 종료되지 않고 marker를 생성했다 (kill 누락)"
+        );
+    }
+
+    /// 정상 종료한 명령의 stdout과 exit_code를 회수한다.
+    #[cfg(unix)]
+    #[test]
+    fn run_returns_output_for_completed_command() {
+        let result = ProcessRunner
+            .run("sh", &["-c", "echo hello"], Duration::from_secs(5))
+            .expect("정상 명령은 결과를 반환해야 한다");
+        assert_eq!(result.stdout.trim(), "hello");
+        assert_eq!(result.exit_code, 0);
+    }
+
+    /// 비영(非0) 종료 코드를 보존한다.
+    #[cfg(unix)]
+    #[test]
+    fn run_preserves_nonzero_exit_code() {
+        let result = ProcessRunner
+            .run("sh", &["-c", "exit 3"], Duration::from_secs(5))
+            .expect("결과를 반환해야 한다");
+        assert_eq!(result.exit_code, 3);
+    }
+
+    /// 파이프 버퍼(64KB)를 초과하는 출력도 드레인 스레드 덕에 데드락 없이 회수한다.
+    /// 드레인을 빠뜨리면 자식이 write에서 블록 → 타임아웃으로 실패한다.
+    #[cfg(unix)]
+    #[test]
+    fn run_drains_large_output_without_deadlock() {
+        let result = ProcessRunner
+            .run(
+                "sh",
+                &["-c", "yes pb | head -n 100000"],
+                Duration::from_secs(10),
+            )
+            .expect("대용량 출력도 회수해야 한다");
+        assert_eq!(result.stdout.lines().count(), 100000);
     }
 }
