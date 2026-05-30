@@ -7,3 +7,6 @@ xcuserdata/
 .build/
 *.log
 .claude/
+
+# 구현 계획서는 ephemeral (설계 §5.8) — worktree 작업용, 버전관리 제외
+docs/superpowers/plans/
