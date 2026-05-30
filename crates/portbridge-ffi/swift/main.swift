@@ -17,7 +17,7 @@
 import Foundation
 
 #if canImport(portbridge_ffiFFI)
-import portbridge_ffiFFI
+    import portbridge_ffiFFI
 #endif
 
 func runOk() {
