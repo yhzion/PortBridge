@@ -1,6 +1,7 @@
 //! PortBridge 공유 코어 — 플랫폼 독립 도메인 타입과 포트 스캔 로직.
 
 pub mod model;
+pub mod persistence;
 pub mod platform;
 pub mod scan;
 pub mod ssh_config;

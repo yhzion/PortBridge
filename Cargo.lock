@@ -330,6 +330,10 @@ dependencies = [
 [[package]]
 name = "portbridge-core"
 version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "portbridge-ffi"

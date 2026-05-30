@@ -1,8 +1,13 @@
 use std::{error::Error, fmt, time::SystemTime};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Server {
     pub id: String,
+    /// `None`이면 직렬화 시 키를 생략한다(Swift `Codable`의 nil-omit 호환). 역직렬화 시
+    /// 키 부재는 `Option`이 기본 `None`이 되므로 `default`는 불필요하다.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub user: String,
     pub host: String,
