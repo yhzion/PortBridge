@@ -107,6 +107,10 @@ enum Commands {
         /// 스캔할 포트 범위 (예: 3000-9000). 생략 시 1000-65535
         #[arg(long)]
         range: Option<String>,
+
+        /// 결과를 머신리더블 JSON 배열로 출력 (기본은 사람용 테이블)
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -120,6 +124,7 @@ fn main() {
             target,
             port,
             range,
+            json,
         } => {
             let (user, host) = split_target(&target).unwrap_or_else(|| {
                 eprintln!("error: target must be in user@host format");
@@ -141,7 +146,13 @@ fn main() {
 
             let runner = ProcessRunner;
             match scan::scan(&runner, &server, port_range) {
-                Ok(ports) => print_table(&ports),
+                Ok(ports) => {
+                    if json {
+                        println!("{}", to_json(&ports));
+                    } else {
+                        print_table(&ports);
+                    }
+                }
                 Err(e) => {
                     eprintln!("{e}");
                     std::process::exit(1);
@@ -195,6 +206,50 @@ fn print_table(ports: &[RemotePort]) {
         let process = rp.process_name.as_deref().unwrap_or("-");
         println!("{:<8} {:<20} {}", rp.port, rp.address, process);
     }
+}
+
+/// 이미 정렬된 `&[RemotePort]`를 JSON 배열 문자열로 직렬화하는 순수 함수.
+///
+/// 각 원소는 `{"port":<n>,"address":"<s>","process_name":<"s"|null>}`.
+/// 빈 입력은 `[]`을 반환한다(에러 아님). I/O는 호출측 — 포맷 로직만 담당한다.
+fn to_json(ports: &[RemotePort]) -> String {
+    let mut out = String::from("[");
+    for (i, rp) in ports.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push_str("{\"port\":");
+        out.push_str(&rp.port.to_string());
+        out.push_str(",\"address\":");
+        push_json_string(&mut out, &rp.address);
+        out.push_str(",\"process_name\":");
+        match &rp.process_name {
+            Some(name) => push_json_string(&mut out, name),
+            None => out.push_str("null"),
+        }
+        out.push('}');
+    }
+    out.push(']');
+    out
+}
+
+/// 문자열을 JSON 문자열 리터럴(둘러싼 `"` 포함)로 이스케이프해 `out`에 덧붙인다.
+fn push_json_string(out: &mut String, s: &str) {
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{0008}' => out.push_str("\\b"),
+            '\u{000C}' => out.push_str("\\f"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }
 
 #[cfg(test)]
@@ -275,6 +330,56 @@ mod tests {
     #[test]
     fn parse_range_equal_bounds() {
         assert_eq!(parse_range(Some("8080-8080")), Ok(8080..=8080));
+    }
+
+    // ── to_json ──────────────────────────────────────────────────────────
+
+    /// 세 필드를 가진 객체의 JSON 배열로 직렬화한다 (객체 구조 고정).
+    #[test]
+    fn to_json_serializes_port_fields() {
+        let ports = vec![RemotePort {
+            port: 8080,
+            address: "127.0.0.1".into(),
+            process_name: Some("nginx".into()),
+        }];
+        assert_eq!(
+            to_json(&ports),
+            r#"[{"port":8080,"address":"127.0.0.1","process_name":"nginx"}]"#
+        );
+    }
+
+    /// process_name이 None이면 JSON null로 매핑한다.
+    #[test]
+    fn to_json_maps_none_process_to_null() {
+        let ports = vec![RemotePort {
+            port: 22,
+            address: "0.0.0.0".into(),
+            process_name: None,
+        }];
+        assert_eq!(
+            to_json(&ports),
+            r#"[{"port":22,"address":"0.0.0.0","process_name":null}]"#
+        );
+    }
+
+    /// 빈 입력은 빈 배열 `[]` (에러 아님).
+    #[test]
+    fn to_json_empty_input_is_empty_array() {
+        assert_eq!(to_json(&[]), "[]");
+    }
+
+    /// 문자열의 `"`와 `\`를 올바르게 이스케이프한다.
+    #[test]
+    fn to_json_escapes_quote_and_backslash() {
+        let ports = vec![RemotePort {
+            port: 1,
+            address: "a\"b".into(),
+            process_name: Some("c\\d".into()),
+        }];
+        assert_eq!(
+            to_json(&ports),
+            r#"[{"port":1,"address":"a\"b","process_name":"c\\d"}]"#
+        );
     }
 
     // ── ProcessRunner ────────────────────────────────────────────────────
