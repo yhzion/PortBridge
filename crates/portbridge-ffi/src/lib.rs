@@ -46,6 +46,11 @@ impl From<PortBridgeError> for PortBridgeFfiError {
                 PortBridgeFfiError::ServerUnreachable { host, reason }
             }
             PortBridgeError::RemoteToolsMissing => PortBridgeFfiError::RemoteToolsMissing,
+            // scan_ports는 스캔 에러만 반환한다 — 터널(ForwardingDiedEarly)은 이 FFI
+            // 경계에 도달하지 않는다. 정식 FFI 노출은 #58(ffi 바인딩) 소관.
+            PortBridgeError::ForwardingDiedEarly { .. } => {
+                unreachable!("scan_ports never emits ForwardingDiedEarly")
+            }
         }
     }
 }
