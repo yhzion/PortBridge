@@ -48,6 +48,8 @@ pub enum PortBridgeError {
     ServerUnreachable { host: String, reason: String },
     RemoteToolsMissing,
     ForwardingDiedEarly { stderr: String },
+    SshConfigNotFound,
+    SshConfigUnreadable { reason: String },
 }
 
 impl fmt::Display for PortBridgeError {
@@ -64,6 +66,12 @@ impl fmt::Display for PortBridgeError {
             }
             Self::ForwardingDiedEarly { stderr } => {
                 write!(f, "forwarding died early: {stderr}")
+            }
+            Self::SshConfigNotFound => {
+                write!(f, "~/.ssh/config not found")
+            }
+            Self::SshConfigUnreadable { reason } => {
+                write!(f, "~/.ssh/config unreadable: {reason}")
             }
         }
     }
@@ -171,6 +179,21 @@ mod tests {
             }
             .to_string(),
             "forwarding died early: bind: address already in use"
+        );
+    }
+
+    #[test]
+    fn port_bridge_error_display_covers_ssh_config_errors() {
+        assert_eq!(
+            PortBridgeError::SshConfigNotFound.to_string(),
+            "~/.ssh/config not found"
+        );
+        assert_eq!(
+            PortBridgeError::SshConfigUnreadable {
+                reason: "permission denied".to_string(),
+            }
+            .to_string(),
+            "~/.ssh/config unreadable: permission denied"
         );
     }
 }
