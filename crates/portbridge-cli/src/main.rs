@@ -5,12 +5,12 @@
 
 use std::io::Read;
 use std::ops::RangeInclusive;
-use std::process::Command;
-use std::time::{Duration, Instant};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant, SystemTime};
 
 use clap::Parser;
 
-use portbridge_core::model::{RemotePort, Server};
+use portbridge_core::model::{Forwarding, PortBridgeError, RemotePort, Server, State};
 use portbridge_core::platform::HostPlatform;
 use portbridge_core::scan::{self, CommandError, CommandResult, CommandRunner};
 use portbridge_core::ssh_config::{resolve_host, ResolvedHost};
@@ -114,6 +114,20 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+
+    /// SSH 로컬 포트 포워딩(`ssh -L`)을 실행한다 (foreground; Ctrl-C로 종료)
+    Tunnel {
+        /// SSH 접속 대상 (user@host)
+        target: String,
+
+        /// 포워딩 스펙: `<local_port>:<remote_host>:<remote_port>`
+        #[arg(short = 'L')]
+        forward: String,
+
+        /// SSH 포트
+        #[arg(short, long, default_value_t = 22)]
+        port: u16,
+    },
 }
 
 // ── 메인 ────────────────────────────────────────────────────────────────
@@ -153,7 +167,174 @@ fn main() {
                 }
             }
         }
+
+        Commands::Tunnel {
+            target,
+            forward,
+            port,
+        } => {
+            let (user, host) = split_target(&target).unwrap_or_else(|| {
+                eprintln!("error: target must be in user@host format");
+                std::process::exit(1);
+            });
+            let spec = parse_forward_spec(&forward).unwrap_or_else(|msg| {
+                eprintln!("error: {msg}");
+                std::process::exit(1);
+            });
+            let server = Server {
+                id: format!("{user}@{host}"),
+                name: None,
+                user,
+                host,
+                port,
+            };
+
+            match start_tunnel(&server, &spec) {
+                Ok((forwarding, mut child, drain)) => {
+                    println!(
+                        "tunnel {:?}: 127.0.0.1:{} → {}:{}  (Ctrl-C to stop)",
+                        forwarding.state,
+                        forwarding.local_port,
+                        spec.remote_host,
+                        forwarding.remote_port
+                    );
+                    // foreground: 터널이 끝날 때까지(Ctrl-C·연결 종료) 블록한다.
+                    let _ = child.wait();
+                    let _ = drain.join();
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
     }
+}
+
+// ── tunnel ──────────────────────────────────────────────────────────────
+
+/// `-L <local_port>:<remote_host>:<remote_port>` 파싱 결과.
+#[derive(Debug, Eq, PartialEq)]
+struct ForwardSpec {
+    local_port: u16,
+    remote_host: String,
+    remote_port: u16,
+}
+
+/// `-L` 인자를 `ForwardSpec`로 파싱한다(순수). `split_target`/`parse_range`의 형제.
+fn parse_forward_spec(spec: &str) -> Result<ForwardSpec, String> {
+    let parts: Vec<&str> = spec.split(':').collect();
+    if parts.len() != 3 {
+        return Err(format!(
+            "-L must be <local_port>:<remote_host>:<remote_port> (got '{spec}')"
+        ));
+    }
+    let local_port = parts[0]
+        .parse::<u16>()
+        .map_err(|_| format!("invalid local port: {}", parts[0]))?;
+    let remote_host = parts[1].to_string();
+    if remote_host.is_empty() {
+        return Err("remote host must not be empty".to_string());
+    }
+    let remote_port = parts[2]
+        .parse::<u16>()
+        .map_err(|_| format!("invalid remote port: {}", parts[2]))?;
+    Ok(ForwardSpec {
+        local_port,
+        remote_host,
+        remote_port,
+    })
+}
+
+/// 정상 시작한 터널을 core `Forwarding`(State::Active)으로 구성한다(순수).
+fn build_forwarding(server_id: &str, spec: &ForwardSpec) -> Forwarding {
+    Forwarding {
+        id: format!("{}:{}", spec.local_port, spec.remote_port),
+        server_id: server_id.to_string(),
+        remote_port: spec.remote_port,
+        local_port: spec.local_port,
+        state: State::Active,
+        activated_at: Some(SystemTime::now()),
+    }
+}
+
+/// `ssh -L`를 spawn하고 grace-window 동안 조기 종료를 감지한다(I/O 경계).
+///
+/// 살아남으면 `(Forwarding, Child, stderr 드레인 핸들)`을 반환한다 — 호출측이
+/// foreground로 `child.wait()`한다. grace-window 내 종료 시 stderr를
+/// `PortBridgeError::ForwardingDiedEarly`로 매핑한다. 이 생명주기·매핑은 CLI 소유다.
+fn start_tunnel(
+    server: &Server,
+    spec: &ForwardSpec,
+) -> Result<(Forwarding, Child, std::thread::JoinHandle<Vec<u8>>), PortBridgeError> {
+    let forward_arg = format!(
+        "{}:{}:{}",
+        spec.local_port, spec.remote_host, spec.remote_port
+    );
+    let ssh_port = server.port.to_string();
+    let target = server.ssh_target();
+    let mut child = Command::new("/usr/bin/ssh")
+        .args([
+            "-L",
+            &forward_arg,
+            "-N",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=3",
+            "-o",
+            "ConnectTimeout=10",
+            "-p",
+            &ssh_port,
+            &target,
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| PortBridgeError::ForwardingDiedEarly {
+            stderr: format!("spawn failed: {e}"),
+        })?;
+
+    // stderr를 별도 스레드에서 드레인 — 장수명 터널에서 파이프 버퍼 포화 데드락 방지
+    // (선행 ProcessRunner 이슈가 확립한 패턴 재사용).
+    let mut stderr_pipe = child.stderr.take().expect("stderr piped");
+    let drain = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stderr_pipe.read_to_end(&mut buf);
+        buf
+    });
+
+    // grace-window: 이 안에 종료하면 조기 종료(포워딩 실패 등)로 판정한다.
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                let stderr = drain.join().unwrap_or_default();
+                return Err(PortBridgeError::ForwardingDiedEarly {
+                    stderr: String::from_utf8_lossy(&stderr).trim().to_string(),
+                });
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    break; // 살아남음 → 시작 성공
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = drain.join();
+                return Err(PortBridgeError::ForwardingDiedEarly {
+                    stderr: format!("wait failed: {e}"),
+                });
+            }
+        }
+    }
+    Ok((build_forwarding(&server.id, spec), child, drain))
 }
 
 // ── 유틸리티 ────────────────────────────────────────────────────────────
@@ -398,6 +579,57 @@ mod tests {
     #[test]
     fn malformed_user_host_target_is_error() {
         assert!(build_scan_server("@host", None).is_err());
+    }
+
+    // ── tunnel (-L 파싱 + Forwarding 구성) ─────────────────────────────────
+
+    #[test]
+    fn parse_forward_spec_valid() {
+        assert_eq!(
+            parse_forward_spec("8080:127.0.0.1:80"),
+            Ok(ForwardSpec {
+                local_port: 8080,
+                remote_host: "127.0.0.1".to_string(),
+                remote_port: 80,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_forward_spec_wrong_part_count() {
+        assert!(parse_forward_spec("8080:80").is_err()); // 2 parts
+        assert!(parse_forward_spec("8080:h:80:extra").is_err()); // 4 parts
+    }
+
+    #[test]
+    fn parse_forward_spec_out_of_range_port() {
+        assert!(parse_forward_spec("99999:h:80").is_err()); // > u16
+        assert!(parse_forward_spec("8080:h:99999").is_err());
+    }
+
+    #[test]
+    fn parse_forward_spec_empty_remote_host() {
+        assert!(parse_forward_spec("8080::80").is_err());
+    }
+
+    #[test]
+    fn parse_forward_spec_non_numeric_port() {
+        assert!(parse_forward_spec("abc:h:80").is_err());
+    }
+
+    #[test]
+    fn build_forwarding_maps_spec_to_active_core_type() {
+        let spec = ForwardSpec {
+            local_port: 8080,
+            remote_host: "10.0.0.5".to_string(),
+            remote_port: 5432,
+        };
+        let forwarding = build_forwarding("deploy@10.0.0.1", &spec);
+        assert_eq!(forwarding.server_id, "deploy@10.0.0.1");
+        assert_eq!(forwarding.local_port, 8080);
+        assert_eq!(forwarding.remote_port, 5432);
+        assert_eq!(forwarding.state, State::Active);
+        assert!(forwarding.activated_at.is_some());
     }
 
     // ── split_target ─────────────────────────────────────────────────────
