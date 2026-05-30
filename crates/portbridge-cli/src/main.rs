@@ -242,13 +242,38 @@ fn parse_range(range: Option<&str>) -> Result<RangeInclusive<u16>, String> {
     }
 }
 
-/// 결과를 PORT / ADDRESS / PROCESS 테이블로 출력.
-fn print_table(ports: &[RemotePort]) {
-    println!("{:<8} {:<20} {}", "PORT", "ADDRESS", "PROCESS");
-    for rp in ports {
-        let process = rp.process_name.as_deref().unwrap_or("-");
-        println!("{:<8} {:<20} {}", rp.port, rp.address, process);
+/// 결과를 PORT / ADDRESS / PROCESS 테이블로 포맷한 문자열로 반환한다(순수).
+///
+/// 컬럼 폭 = `max(헤더 라벨 길이, 그 컬럼 데이터의 최대 길이)`이라 IPv6 등 긴 주소가
+/// 섞여도 정렬이 어긋나지 않는다. 좌측 정렬, 마지막 `PROCESS` 컬럼은 trailing
+/// whitespace 없이. `process_name`이 `None`이면 `-`.
+fn format_table(ports: &[RemotePort]) -> String {
+    let port_cells: Vec<String> = ports.iter().map(|rp| rp.port.to_string()).collect();
+    let process = |rp: &RemotePort| rp.process_name.as_deref().unwrap_or("-").to_string();
+
+    let port_w = "PORT"
+        .len()
+        .max(port_cells.iter().map(String::len).max().unwrap_or(0));
+    let addr_w = "ADDRESS"
+        .len()
+        .max(ports.iter().map(|rp| rp.address.len()).max().unwrap_or(0));
+
+    let mut out = format!("{:<port_w$} {:<addr_w$} {}", "PORT", "ADDRESS", "PROCESS");
+    for (i, rp) in ports.iter().enumerate() {
+        out.push('\n');
+        out.push_str(&format!(
+            "{:<port_w$} {:<addr_w$} {}",
+            port_cells[i],
+            rp.address,
+            process(rp)
+        ));
     }
+    out
+}
+
+/// `format_table`의 결과를 출력하는 얇은 래퍼.
+fn print_table(ports: &[RemotePort]) {
+    println!("{}", format_table(ports));
 }
 
 /// 이미 정렬된 `&[RemotePort]`를 JSON 배열 문자열로 직렬화하는 순수 함수.
@@ -499,6 +524,53 @@ mod tests {
             to_json(&ports),
             r#"[{"port":1,"address":"a\"b","process_name":"c\\d"}]"#
         );
+    }
+
+    // ── format_table ─────────────────────────────────────────────────────
+
+    /// 20자를 초과하는 IPv6 주소가 섞여도 PROCESS 컬럼이 모든 줄에서 같은 오프셋에서
+    /// 시작해야 한다(고정 20자 폭에서는 어긋나 실패하는 회귀 테스트).
+    #[test]
+    fn format_table_aligns_process_column_with_long_address() {
+        let ports = vec![
+            RemotePort {
+                port: 22,
+                address: "::1".into(),
+                process_name: Some("sshd".into()),
+            },
+            RemotePort {
+                port: 8080,
+                address: "fe80::1ff:fe23:4567:890a".into(), // 24자 > 고정 20자
+                process_name: Some("nginx".into()),
+            },
+        ];
+        let table = format_table(&ports);
+        let lines: Vec<&str> = table.lines().collect();
+        // PROCESS는 마지막(패딩 없는) 컬럼 → 값이 줄의 suffix. 시작 오프셋 = len - 값길이.
+        assert!(lines[0].ends_with("PROCESS"));
+        let offset = lines[0].len() - "PROCESS".len();
+        assert!(lines[1].ends_with("sshd"));
+        assert_eq!(lines[1].len() - "sshd".len(), offset);
+        assert!(lines[2].ends_with("nginx"));
+        assert_eq!(lines[2].len() - "nginx".len(), offset);
+    }
+
+    /// 빈 입력에서도 헤더가 헤더 라벨 폭으로 정렬된다.
+    #[test]
+    fn format_table_empty_aligns_to_header_labels() {
+        assert_eq!(format_table(&[]), "PORT ADDRESS PROCESS");
+    }
+
+    /// process_name이 None인 행은 `-`로 렌더된다.
+    #[test]
+    fn format_table_none_process_renders_dash() {
+        let ports = vec![RemotePort {
+            port: 22,
+            address: "10.0.0.1".into(),
+            process_name: None,
+        }];
+        let table = format_table(&ports);
+        assert!(table.lines().nth(1).unwrap().ends_with('-'));
     }
 
     // ── ProcessRunner ────────────────────────────────────────────────────
