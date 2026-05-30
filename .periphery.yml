@@ -1,7 +1,7 @@
 # Periphery 설정 — PortBridge
 # 참고: https://github.com/peripheryapp/periphery#configuration
 
-project: PortBridge.xcodeproj
+project: apps/macos/PortBridge.xcodeproj
 schemes:
   - PortBridge
 targets:
