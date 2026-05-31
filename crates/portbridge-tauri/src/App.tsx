@@ -22,11 +22,10 @@ function App() {
   const errors = useAppStore((s) => s.errors);
   const themeMode = useAppStore((s) => s.themeMode);
   const pendingPortConflict = useAppStore((s) => s.pendingPortConflict);
-  const conflictServerName = useAppStore((s) =>
-    s.pendingPortConflict
-      ? serverDisplayName(s, s.pendingPortConflict.serverId)
-      : undefined,
-  );
+  const servers = useAppStore((s) => s.servers);
+  const conflictServerName = pendingPortConflict
+    ? serverDisplayName(servers, pendingPortConflict.serverId)
+    : undefined;
 
   const dismissError = useAppStore((s) => s.dismissError);
   const setThemeMode = useAppStore((s) => s.setThemeMode);

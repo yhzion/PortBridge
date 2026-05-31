@@ -381,28 +381,42 @@ export const useAppStore = create<AppState>()((set, get) => ({
   setThemeMode: (mode) => set({ themeMode: mode }),
 }));
 
-// ── 파생 셀렉터 (컴포넌트가 useAppStore(selector)로 구독) ──
+// ── 파생 셀렉터 ──
+//
+// ⚠️ zustand v5: useAppStore(selector)의 selector가 매번 새 참조(배열/객체/클로저)를 반환하면
+// 무한 재렌더(React #185)가 난다. 따라서 이 셀렉터들은 **원시 슬라이스를 인자로 받는 순수 함수**이며,
+// 컴포넌트는 슬라이스만 구독(useAppStore((s)=>s.servers) 등 — 안정 참조)한 뒤 useMemo로 파생한다.
 
 /** 서버 + 스캔포트 + 펼침/스캔상태 결합. 미설정 섹션은 펼침·idle 기본. */
-export function selectServerSections(s: AppState): ServerSection[] {
-  return s.servers.map((server) => ({
+export function selectServerSections(
+  servers: Server[],
+  portsByServer: Record<string, RemotePort[]>,
+  expanded: Record<string, boolean>,
+  scanStateByServer: Record<string, ScanState>,
+): ServerSection[] {
+  return servers.map((server) => ({
     server,
-    ports: s.portsByServer[server.id] ?? [],
-    isExpanded: s.expanded[server.id] ?? true,
-    scanState: s.scanStateByServer[server.id] ?? { kind: "idle" },
+    ports: portsByServer[server.id] ?? [],
+    isExpanded: expanded[server.id] ?? true,
+    scanState: scanStateByServer[server.id] ?? { kind: "idle" },
   }));
 }
 
 /** 활성 계열(Idle 아님) 포워딩을 활성화 시각 내림차순으로. */
-export function selectActiveForwardings(s: AppState): Forwarding[] {
-  return s.forwardings
+export function selectActiveForwardings(
+  forwardings: Forwarding[],
+): Forwarding[] {
+  return forwardings
     .filter((f) => isActiveForwardingState(f.state))
     .sort((a, b) => (b.activated_at_ms ?? 0) - (a.activated_at_ms ?? 0));
 }
 
 /** 모든 섹션이 펼쳐졌는지(allExpanded). */
-export function selectAllExpanded(s: AppState): boolean {
-  return s.servers.every((server) => s.expanded[server.id] ?? true);
+export function selectAllExpanded(
+  servers: Server[],
+  expanded: Record<string, boolean>,
+): boolean {
+  return servers.every((server) => expanded[server.id] ?? true);
 }
 
 /** 검색어 → 포트 매칭 함수(포트번호 부분일치 또는 프로세스명 부분일치). */
@@ -417,20 +431,20 @@ export function makeMatches(searchText: string): (port: RemotePort) => boolean {
 
 /** 즐겨찾기 여부. */
 export function isFavorite(
-  s: AppState,
+  favorites: Favorite[],
   serverId: string,
   remotePort: number,
 ): boolean {
-  return s.favorites.some(
+  return favorites.some(
     (f) => f.serverId === serverId && f.remotePort === remotePort,
   );
 }
 
 /** 서버 표시명(name ?? host). */
 export function serverDisplayName(
-  s: AppState,
+  servers: Server[],
   serverId: string,
 ): string | undefined {
-  const sv = s.servers.find((x) => x.id === serverId);
+  const sv = servers.find((x) => x.id === serverId);
   return sv ? (sv.name ?? sv.host) : undefined;
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   isFavorite,
@@ -22,17 +22,37 @@ import "./ServerList.css";
  * 추가/편집 모달 + 삭제 확인. 스토어를 구독하고 콜백을 순수 컴포넌트들에 내려준다.
  */
 export function ServerList() {
-  const sections = useAppStore(selectServerSections);
-  const activeForwardings = useAppStore(selectActiveForwardings);
-  const allExpanded = useAppStore(selectAllExpanded);
-  const searchText = useAppStore((s) => s.searchText);
+  // zustand v5: 원시 슬라이스만 구독(안정 참조)하고 파생은 useMemo로 — selector가 새 참조를
+  // 반환하면 무한 재렌더(#185)가 나므로 useAppStore(selectServerSections) 형태는 금지.
   const servers = useAppStore((s) => s.servers);
-  const matches = useMemo(() => makeMatches(searchText), [searchText]);
-  const isFav = useAppStore(
-    (s) => (serverId: string, port: number) => isFavorite(s, serverId, port),
+  const portsByServer = useAppStore((s) => s.portsByServer);
+  const expanded = useAppStore((s) => s.expanded);
+  const scanStateByServer = useAppStore((s) => s.scanStateByServer);
+  const forwardingsRaw = useAppStore((s) => s.forwardings);
+  const favorites = useAppStore((s) => s.favorites);
+  const searchText = useAppStore((s) => s.searchText);
+
+  const sections = useMemo(
+    () =>
+      selectServerSections(servers, portsByServer, expanded, scanStateByServer),
+    [servers, portsByServer, expanded, scanStateByServer],
   );
-  const displayName = useAppStore(
-    (s) => (serverId: string) => serverDisplayName(s, serverId),
+  const activeForwardings = useMemo(
+    () => selectActiveForwardings(forwardingsRaw),
+    [forwardingsRaw],
+  );
+  const allExpanded = useMemo(
+    () => selectAllExpanded(servers, expanded),
+    [servers, expanded],
+  );
+  const matches = useMemo(() => makeMatches(searchText), [searchText]);
+  const isFav = useCallback(
+    (serverId: string, port: number) => isFavorite(favorites, serverId, port),
+    [favorites],
+  );
+  const displayName = useCallback(
+    (serverId: string) => serverDisplayName(servers, serverId),
+    [servers],
   );
 
   const setSearchText = useAppStore((s) => s.setSearchText);
