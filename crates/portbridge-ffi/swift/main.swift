@@ -18,7 +18,7 @@ import Foundation
     import portbridge_ffiFFI
 #endif
 
-// happy 경로: exit 0 + ss LISTEN 라인을 돌려주는 러너.
+/// happy 경로: exit 0 + ss LISTEN 라인을 돌려주는 러너.
 final class OkRunner: FfiCommandRunner {
     func run(executable: String, args: [String], timeout: TimeInterval) throws -> CommandResultDto {
         CommandResultDto(
@@ -29,7 +29,7 @@ final class OkRunner: FfiCommandRunner {
     }
 }
 
-// error 경로: exit 255 + publickey stderr → core가 SshAuthFailed로 분류.
+/// error 경로: exit 255 + publickey stderr → core가 SshAuthFailed로 분류.
 final class AuthFailRunner: FfiCommandRunner {
     func run(executable: String, args: [String], timeout: TimeInterval) throws -> CommandResultDto {
         CommandResultDto(exitCode: 255, stdout: "", stderr: "Permission denied (publickey).")
