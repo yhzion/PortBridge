@@ -12,6 +12,9 @@ xcuserdata/
 docs/superpowers/plans/
 target/
 
+# LLVM 커버리지 임시 파일 (cargo test 등)
+*.profraw
+
 # UniFFI 생성물 — 빌드 타임에 Run Script(build-ffi.sh)가 cargo + uniffi-bindgen으로
 # 매번 재생성하므로 체크인하지 않는다(#58 철학 계승). staticlib(.a)/dylib은 target/가 커버.
 apps/macos/Generated/
