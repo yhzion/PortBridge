@@ -27,7 +27,7 @@ nonisolated struct ReleaseInfo: Decodable, Equatable {
             tagName: tagName,
             name: name,
             htmlUrl: htmlURL.absoluteString,
-            publishedAt: publishedAt.map { ISO8601DateFormatter().string(from: $0) },
+            publishedAt: publishedAt?.formatted(.iso8601),
             body: body
         )
     }
