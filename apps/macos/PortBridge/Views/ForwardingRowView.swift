@@ -41,14 +41,14 @@ struct ForwardingRowView: View {
         let serverPrefix = serverDisplayName.map { "\($0) · " } ?? ""
         switch forwarding?.state {
         case .starting:
-            return "\(serverPrefix)포워딩 연결 중…"
+            return String(localized: "forwarding.row.subtitle.connecting", defaultValue: "\(serverPrefix)포워딩 연결 중…")
         case .active:
             if let local = forwarding?.localPort {
-                return "→ :\(local) 포워딩 중"
+                return String(localized: "forwarding.row.subtitle.activeLocal", defaultValue: "→ :\(local) 포워딩 중")
             }
-            return "\(serverPrefix)포워딩 중"
+            return String(localized: "forwarding.row.subtitle.active", defaultValue: "\(serverPrefix)포워딩 중")
         case .error:
-            return "\(serverPrefix)포워딩 실패 — 클릭해 다시 시도"
+            return String(localized: "forwarding.row.subtitle.error", defaultValue: "\(serverPrefix)포워딩 실패 — 클릭해 다시 시도")
         case .idle, .none:
             return nil
         }
@@ -66,8 +66,10 @@ struct ForwardingRowView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가")
-            .help(isFavorite ? "즐겨찾기에서 제거" : "즐겨찾기에 추가")
+            .accessibilityLabel(isFavorite
+                ? String(localized: "forwarding.row.favorite.a11yRemove", defaultValue: "즐겨찾기 해제")
+                : String(localized: "forwarding.row.favorite.a11yAdd", defaultValue: "즐겨찾기 추가"))
+            .help(isFavorite ? String(localized: "forwarding.row.favorite.helpRemove", defaultValue: "즐겨찾기에서 제거") : String(localized: "forwarding.row.favorite.helpAdd", defaultValue: "즐겨찾기에 추가"))
 
             Button(action: onToggle) {
                 HStack(alignment: .center, spacing: 10) {
@@ -103,10 +105,14 @@ struct ForwardingRowView: View {
             }
             .buttonStyle(.plain)
             .disabled(isStarting)
-            .help(forwarding?.state == .active ? "클릭해 포워딩 끄기" : "클릭해 포워딩 켜기")
+            .help(forwarding?.state == .active
+                ? String(localized: "forwarding.row.toggle.helpStop", defaultValue: "클릭해 포워딩 끄기")
+                : String(localized: "forwarding.row.toggle.helpStart", defaultValue: "클릭해 포워딩 켜기"))
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint(forwarding?.state == .active ? "이중 탭하여 포워딩 끄기" : "이중 탭하여 포워딩 켜기")
+            .accessibilityHint(forwarding?.state == .active
+                ? String(localized: "forwarding.row.toggle.a11yHintStop", defaultValue: "이중 탭하여 포워딩 끄기")
+                : String(localized: "forwarding.row.toggle.a11yHintStart", defaultValue: "이중 탭하여 포워딩 켜기"))
 
             if isActive, let local = forwarding?.localPort {
                 OpenInBrowserButton(localPort: local)
@@ -168,7 +174,7 @@ private struct OpenInBrowserButton: View {
     }
 
     private var helpText: String {
-        "기본 브라우저로 http://localhost:\(localPort) 열기"
+        String(localized: "forwarding.row.openInBrowser.help", defaultValue: "기본 브라우저로 http://localhost:\(localPort) 열기")
     }
 
     var body: some View {
@@ -178,7 +184,7 @@ private struct OpenInBrowserButton: View {
             HStack(spacing: PBLayout.Space.s1) {
                 Image(systemName: "arrow.up.right.square")
                     .imageScale(.small)
-                Text("브라우저에서 열기")
+                Text(String(localized: "forwarding.row.openInBrowser.label", defaultValue: "브라우저에서 열기"))
                     .font(.caption)
             }
             .foregroundStyle(.tint)

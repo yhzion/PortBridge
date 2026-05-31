@@ -12,7 +12,7 @@ nonisolated struct PortScanner {
         guard let port = UInt16(exactly: server.port) else {
             throw PortBridgeError.serverUnreachable(
                 host: server.host,
-                reason: "포트 번호가 범위를 벗어났습니다: \(server.port)"
+                reason: String(localized: "scan.error.portOutOfRange", defaultValue: "포트 번호가 범위를 벗어났습니다: \(server.port)")
             )
         }
 

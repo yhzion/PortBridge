@@ -85,7 +85,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let rows = viewModel.favoriteRows
         if rows.isEmpty {
             let hint = NSMenuItem(
-                title: "메인 창에서 ★를 눌러 즐겨찾기를 추가하세요",
+                title: String(
+                    localized: "menu.favorites.empty",
+                    defaultValue: "메인 창에서 ★를 눌러 즐겨찾기를 추가하세요"
+                ),
                 action: nil,
                 keyEquivalent: ""
             )
