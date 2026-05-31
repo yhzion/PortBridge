@@ -65,8 +65,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Background update check on launch (no-op if disabled or recently checked).
-        Task { @MainActor in
-            await viewModel.updates.checkIfDue()
+        // Skipped under XCTest: the live GitHubReleaseFetcher network call during the
+        // test host's launch stalls runner attachment ("Test runner never began
+        // executing tests after launching" — macOS parity CI flakiness). Mirrors the
+        // launch-side-effect skips in init().
+        if !Self.isRunningUnderTest {
+            Task(priority: .utility) { @MainActor in
+                await viewModel.updates.checkIfDue()
+            }
         }
 
         if Self.shouldOpenMainWindowOnLaunch {
