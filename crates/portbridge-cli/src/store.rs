@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use std::{env, fs};
 
 use portbridge_core::model::Server;
-use portbridge_core::persistence::{Persistence, PersistenceError, SERVERS_KEY};
+use portbridge_core::persistence::{
+    Favorite, Persistence, PersistenceError, FAVORITES_KEY, SERVERS_KEY,
+};
 
 // ── 경로 해석 (I/O 경계) ──────────────────────────────────────────────────
 
@@ -105,6 +107,40 @@ pub fn find<'a>(servers: &'a [Server], ident: &str) -> Option<&'a Server> {
     servers
         .iter()
         .find(|s| s.id == ident || s.name.as_deref() == Some(ident))
+}
+
+// ── 즐겨찾기 목록 (de)직렬화 ──────────────────────────────────────────────
+//
+// core `Favorite{server_id, remote_port}` + `FAVORITES_KEY`를 그대로 소비한다. JSON 키는
+// core serde가 camelCase(serverId/remotePort)로 직렬화한다(servers와 동일 규약).
+//
+// 주의: CLI와 Desktop은 **저장소 비공유**(CLI=파일, Desktop=UserDefaults — P0-1)이며
+// `server_id` 체계도 다르다(CLI는 `srv-<nanos>` 문자열, Desktop `FavoriteKey.serverId`는
+// UUID). 따라서 한쪽 데이터를 다른 쪽이 읽도록 의도하지 않는다 — 키 이름만 같을 뿐
+// 값 수준 cross-app 호환은 아니다(크로스앱 동기화는 향후 별도 과제).
+
+/// 저장된 즐겨찾기 목록을 읽는다. 파일 부재 → 빈 목록. 손상 → 에러(load_servers와 동일 정책).
+pub fn load_favorites(p: &dyn Persistence) -> Result<Vec<Favorite>, String> {
+    match p.load(FAVORITES_KEY).map_err(|e| e.to_string())? {
+        Some(json) => {
+            serde_json::from_str(&json).map_err(|e| format!("저장된 즐겨찾기 목록이 손상됨: {e}"))
+        }
+        None => Ok(Vec::new()),
+    }
+}
+
+/// 즐겨찾기 목록을 저장한다(core Swift 호환 JSON 형태).
+pub fn save_favorites(p: &dyn Persistence, favorites: &[Favorite]) -> Result<(), String> {
+    let json = serde_json::to_string(favorites).map_err(|e| e.to_string())?;
+    p.save(FAVORITES_KEY, &json).map_err(|e| e.to_string())
+}
+
+/// `(server_id, remote_port)`가 동일한 즐겨찾기가 이미 있는지 검사
+/// (Swift `FavoriteKey` 동치 — 같은 서버의 다른 포트는 별개 즐겨찾기).
+pub fn is_favorite_duplicate(favorites: &[Favorite], server_id: &str, remote_port: u16) -> bool {
+    favorites
+        .iter()
+        .any(|f| f.server_id == server_id && f.remote_port == remote_port)
 }
 
 #[cfg(test)]
@@ -218,5 +254,62 @@ mod tests {
             Some(&"id-1".to_string())
         );
         assert!(find(&servers, "absent").is_none());
+    }
+
+    // ── 즐겨찾기 ───────────────────────────────────────────────────────────
+
+    fn favorite(server_id: &str, remote_port: u16) -> Favorite {
+        Favorite {
+            server_id: server_id.to_string(),
+            remote_port,
+        }
+    }
+
+    #[test]
+    fn load_favorites_missing_is_empty() {
+        let (store, dir) = temp_store();
+        assert_eq!(load_favorites(&store).unwrap(), vec![]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_then_load_favorites_roundtrips() {
+        let (store, dir) = temp_store();
+        let favs = vec![favorite("srv-1", 5432), favorite("srv-2", 6379)];
+        save_favorites(&store, &favs).unwrap();
+        assert_eq!(load_favorites(&store).unwrap(), favs);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 저장 형태가 Swift `FavoriteStore`와 호환되는 camelCase 키(serverId/remotePort)인지.
+    #[test]
+    fn favorites_persist_in_swift_camelcase() {
+        let (store, dir) = temp_store();
+        save_favorites(&store, &[favorite("srv-1", 5432)]).unwrap();
+        let raw = store.load(FAVORITES_KEY).unwrap().unwrap();
+        assert!(raw.contains("serverId"));
+        assert!(raw.contains("remotePort"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_favorites_corrupt_is_error() {
+        let (store, dir) = temp_store();
+        store.save(FAVORITES_KEY, "{ not valid").unwrap();
+        assert!(load_favorites(&store).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn favorite_duplicate_exact_pair_is_detected() {
+        let favs = vec![favorite("srv-1", 5432)];
+        assert!(is_favorite_duplicate(&favs, "srv-1", 5432));
+    }
+
+    #[test]
+    fn same_server_different_port_is_not_duplicate() {
+        let favs = vec![favorite("srv-1", 5432)];
+        assert!(!is_favorite_duplicate(&favs, "srv-1", 6379));
+        assert!(!is_favorite_duplicate(&favs, "srv-2", 5432));
     }
 }

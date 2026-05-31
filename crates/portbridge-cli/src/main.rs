@@ -11,7 +11,7 @@ use std::time::{Duration, Instant, SystemTime};
 use clap::Parser;
 
 use portbridge_core::model::{PortBridgeError, RemotePort, Server};
-use portbridge_core::persistence::Persistence;
+use portbridge_core::persistence::{Favorite, Persistence};
 use portbridge_core::platform::HostPlatform;
 use portbridge_core::scan::{self, CommandError, CommandResult, CommandRunner};
 use portbridge_core::ssh_config::{resolve_host, ResolvedHost};
@@ -105,6 +105,12 @@ enum Commands {
     Server {
         #[command(subcommand)]
         action: ServerCmd,
+    },
+
+    /// 즐겨찾기 포워딩을 관리한다 (영속 저장: add/rm/ls)
+    Favorite {
+        #[command(subcommand)]
+        action: FavoriteCmd,
     },
 
     /// 원격 서버의 수신 포트를 스캔한다
@@ -291,11 +297,142 @@ fn format_server_table(servers: &[Server]) -> String {
     out
 }
 
+// ── favorite 서브커맨드 ──────────────────────────────────────────────────
+
+#[derive(clap::Subcommand)]
+enum FavoriteCmd {
+    /// 즐겨찾기를 추가한다 (대상 서버는 저장돼 있어야 함)
+    Add {
+        /// 저장된 서버 (id 또는 name)
+        server: String,
+        /// 원격 포트
+        remote_port: u16,
+    },
+    /// 즐겨찾기를 삭제한다
+    Rm {
+        /// 저장된 서버 (id 또는 name)
+        server: String,
+        /// 원격 포트
+        remote_port: u16,
+    },
+    /// 즐겨찾기 목록
+    Ls {
+        /// 머신리더블 JSON으로 출력
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// `favorite` 서브커맨드 디스패치 — 파일 저장소를 열고 액션을 실행한다(I/O 경계).
+fn run_favorite(action: FavoriteCmd) {
+    let store = store::FileStore::new(store::config_dir());
+    let result = match action {
+        FavoriteCmd::Add {
+            server,
+            remote_port,
+        } => favorite_add(&store, &server, remote_port),
+        FavoriteCmd::Rm {
+            server,
+            remote_port,
+        } => favorite_rm(&store, &server, remote_port),
+        FavoriteCmd::Ls { json } => favorite_ls(&store, json),
+    };
+    if let Err(msg) = result {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    }
+}
+
+/// 즐겨찾기를 추가한다. server는 저장된 서버(id/name)로 해석해 그 **id**를 저장한다
+/// (Desktop `FavoriteKey`와 동일하게 server_id로 즐겨찾기를 식별 — 단 ID 체계·저장소는
+/// CLI/Desktop이 서로 다름, store.rs 참조). 저장 서버가 없으면 에러, 중복은 거부.
+fn favorite_add(p: &dyn Persistence, server: &str, remote_port: u16) -> Result<(), String> {
+    let servers = store::load_servers(p)?;
+    let target = store::find(&servers, server)
+        .ok_or_else(|| format!("저장된 서버를 찾을 수 없음: {server} (먼저 server add)"))?;
+    let server_id = target.id.clone();
+
+    let mut favorites = store::load_favorites(p)?;
+    if store::is_favorite_duplicate(&favorites, &server_id, remote_port) {
+        return Err(format!("이미 즐겨찾기: {server} :{remote_port}"));
+    }
+    favorites.push(Favorite {
+        server_id,
+        remote_port,
+    });
+    store::save_favorites(p, &favorites)?;
+    println!("즐겨찾기 추가: {server} :{remote_port}");
+    Ok(())
+}
+
+/// 즐겨찾기를 삭제한다. server는 id/name 모두 받되 저장된 `server_id`로 매칭한다.
+/// 일치 항목이 없으면 에러.
+fn favorite_rm(p: &dyn Persistence, server: &str, remote_port: u16) -> Result<(), String> {
+    let servers = store::load_servers(p)?;
+    // 저장 서버에서 해석되면 그 id를, 아니면 입력값 자체를 server_id로 간주(서버가 이미
+    // 삭제된 dangling 즐겨찾기도 제거할 수 있도록).
+    let server_id = store::find(&servers, server)
+        .map(|s| s.id.clone())
+        .unwrap_or_else(|| server.to_string());
+
+    let mut favorites = store::load_favorites(p)?;
+    let before = favorites.len();
+    favorites.retain(|f| !(f.server_id == server_id && f.remote_port == remote_port));
+    if favorites.len() == before {
+        return Err(format!("즐겨찾기를 찾을 수 없음: {server} :{remote_port}"));
+    }
+    store::save_favorites(p, &favorites)?;
+    println!("즐겨찾기 삭제: {server} :{remote_port}");
+    Ok(())
+}
+
+/// 즐겨찾기 목록을 테이블/JSON으로 출력한다. 테이블은 server_id를 서버명으로 lookup한다.
+fn favorite_ls(p: &dyn Persistence, json: bool) -> Result<(), String> {
+    let favorites = store::load_favorites(p)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&favorites).map_err(|e| e.to_string())?
+        );
+    } else {
+        let servers = store::load_servers(p)?;
+        println!("{}", format_favorite_table(&favorites, &servers));
+    }
+    Ok(())
+}
+
+/// 즐겨찾기를 SERVER / REMOTE_PORT 테이블로 포맷한다(순수). server_id는 저장 서버에서
+/// `name`(없으면 `user@host`)으로 표시하고, 삭제된 서버를 가리키면 `<id> (?)`로 표시한다.
+fn format_favorite_table(favorites: &[Favorite], servers: &[Server]) -> String {
+    let label = |server_id: &str| -> String {
+        match store::find(servers, server_id) {
+            Some(s) => s
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("{}@{}", s.user, s.host)),
+            None => format!("{server_id} (?)"),
+        }
+    };
+    let cells: Vec<String> = favorites.iter().map(|f| label(&f.server_id)).collect();
+    let server_w = "SERVER"
+        .len()
+        .max(cells.iter().map(String::len).max().unwrap_or(0));
+
+    let mut out = format!("{:<server_w$} {}", "SERVER", "REMOTE_PORT");
+    for (i, f) in favorites.iter().enumerate() {
+        out.push('\n');
+        out.push_str(&format!("{:<server_w$} {}", cells[i], f.remote_port));
+    }
+    out
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Server { action } => run_server(action),
+
+        Commands::Favorite { action } => run_favorite(action),
 
         Commands::Scan {
             target,
@@ -1185,6 +1322,74 @@ mod tests {
         assert_eq!(store::load_servers(&p).unwrap().len(), 1);
         // 없는 것 삭제 → 에러
         assert!(server_rm(&p, "prod").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── favorite CRUD ───────────────────────────────────────────────────────
+
+    /// 즐겨찾기 테이블: server_id를 서버명으로 lookup, 삭제된 서버는 `<id> (?)`.
+    #[test]
+    fn format_favorite_table_labels_known_and_dangling() {
+        let servers = vec![Server {
+            id: "srv-1".into(),
+            name: Some("prod".into()),
+            user: "u".into(),
+            host: "h".into(),
+            port: 22,
+        }];
+        let favorites = vec![
+            Favorite {
+                server_id: "srv-1".into(),
+                remote_port: 5432,
+            },
+            Favorite {
+                server_id: "gone".into(),
+                remote_port: 6379,
+            },
+        ];
+        let lines: Vec<String> = format_favorite_table(&favorites, &servers)
+            .lines()
+            .map(str::to_string)
+            .collect();
+        assert!(lines[0].starts_with("SERVER"));
+        assert!(lines[1].starts_with("prod") && lines[1].ends_with("5432"));
+        assert!(lines[2].contains("gone (?)") && lines[2].ends_with("6379"));
+    }
+
+    /// add는 저장 서버 id로 영속·중복 거부, 미존재 서버는 에러, rm은 삭제·부재 시 에러.
+    #[test]
+    fn favorite_add_rm_end_to_end() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_fav_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+
+        // 서버 먼저 저장
+        server_add(&p, "deploy@10.0.0.1", Some("prod".into()), 22).unwrap();
+
+        // 미존재 서버로 즐겨찾기 추가 → 에러
+        assert!(favorite_add(&p, "nope", 5432).is_err());
+
+        // name으로 추가(서버 id로 저장됨)
+        favorite_add(&p, "prod", 5432).unwrap();
+        let favs = store::load_favorites(&p).unwrap();
+        assert_eq!(favs.len(), 1);
+        let sid = store::load_servers(&p).unwrap()[0].id.clone();
+        assert_eq!(favs[0].server_id, sid);
+
+        // 같은 (server, port) 중복 거부
+        assert!(favorite_add(&p, "prod", 5432).is_err());
+        // 같은 서버 다른 포트는 허용
+        favorite_add(&p, "prod", 6379).unwrap();
+        assert_eq!(store::load_favorites(&p).unwrap().len(), 2);
+
+        // 삭제(name으로) + 부재 삭제 에러
+        favorite_rm(&p, "prod", 5432).unwrap();
+        assert_eq!(store::load_favorites(&p).unwrap().len(), 1);
+        assert!(favorite_rm(&p, "prod", 5432).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
