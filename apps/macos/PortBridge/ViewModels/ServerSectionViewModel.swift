@@ -25,7 +25,7 @@ final class ServerSectionViewModel: Identifiable {
         server.id
     }
 
-    init(server: Server, scanner: PortScanner = PortScanner(runner: ProcessCommandRunner())) {
+    init(server: Server, scanner: PortScanner = PortScanner(runner: BlockingProcessRunner())) {
         self.server = server
         self.scanner = scanner
     }

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		FF10000000000000000000F2 /* portbridge_ffi.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10000000000000000000F1 /* portbridge_ffi.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		2DA098F22FB189570091FC7C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		FF10000000000000000000F1 /* portbridge_ffi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = portbridge_ffi.swift; path = Generated/portbridge_ffi.swift; sourceTree = "<group>"; };
 		2DA098E42FB189560091FC7C /* PortBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PortBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DA098F12FB189570091FC7C /* PortBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PortBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DA098FB2FB189570091FC7C /* PortBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PortBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -89,10 +94,19 @@
 			isa = PBXGroup;
 			children = (
 				2DA098E62FB189560091FC7C /* PortBridge */,
+				FF10000000000000000000F4 /* Generated */,
 				2DA098F42FB189570091FC7C /* PortBridgeTests */,
 				2DA098FE2FB189570091FC7C /* PortBridgeUITests */,
 				2DA098E52FB189560091FC7C /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		FF10000000000000000000F4 /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				FF10000000000000000000F1 /* portbridge_ffi.swift */,
+			);
+			name = Generated;
 			sourceTree = "<group>";
 		};
 		2DA098E52FB189560091FC7C /* Products */ = {
@@ -112,6 +126,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2DA099052FB189570091FC7C /* Build configuration list for PBXNativeTarget "PortBridge" */;
 			buildPhases = (
+				FF10000000000000000000F3 /* Generate FFI Bindings */,
 				2DA098E02FB189560091FC7C /* Sources */,
 				2DA098E12FB189560091FC7C /* Frameworks */,
 				2DA098E22FB189560091FC7C /* Resources */,
@@ -246,6 +261,28 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		FF10000000000000000000F3 /* Generate FFI Bindings */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate FFI Bindings";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Generated/portbridge_ffi.swift",
+				"$(SRCROOT)/Generated/ffimod/portbridge_ffiFFI.h",
+				"$(SRCROOT)/Generated/ffimod/module.modulemap",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/Scripts/build-ffi.sh\"\n";
+		};
 		2DA0AAAA2FB189570091FC7C /* Inject Version from Git */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -272,6 +309,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FF10000000000000000000F2 /* portbridge_ffi.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -451,6 +489,10 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../target/debug/libportbridge_ffi.a",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = youngho.jeon.PortBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -458,6 +500,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Generated/ffimod";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -485,6 +528,10 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../target/debug/libportbridge_ffi.a",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = youngho.jeon.PortBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -492,6 +539,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Generated/ffimod";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -513,6 +561,7 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Generated/ffimod";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PortBridge.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PortBridge";
@@ -535,6 +584,7 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Generated/ffimod";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PortBridge.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PortBridge";
