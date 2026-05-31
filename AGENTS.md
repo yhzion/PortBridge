@@ -21,7 +21,8 @@ opencode, pi 등)가 따르는 표준 규약이다. 세션 시작 시 읽고 따
 |-----------|----------------|
 | `zone:core`  | `crates/portbridge-core/` |
 | `zone:cli`   | `crates/portbridge-cli/` |
-| `zone:tauri` | `crates/portbridge-tauri/` (향후) |
+| `zone:ffi`   | `crates/portbridge-ffi/` |
+| `zone:tauri` | `crates/portbridge-tauri/` |
 | `zone:macos` | `apps/macos/` |
 | `zone:ci`    | `.github/` |
 | `zone:docs`  | `docs/`, `README.md` |
