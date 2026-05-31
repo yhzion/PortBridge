@@ -77,7 +77,10 @@ pub fn save_servers(p: &dyn Persistence, servers: &[Server]) -> Result<(), Strin
 }
 
 pub fn load_favorites(p: &dyn Persistence) -> Result<Vec<Favorite>, String> {
-    decode_list(p.load(FAVORITES_KEY).map_err(|e| e.to_string())?, "즐겨찾기")
+    decode_list(
+        p.load(FAVORITES_KEY).map_err(|e| e.to_string())?,
+        "즐겨찾기",
+    )
 }
 
 pub fn save_favorites(p: &dyn Persistence, favorites: &[Favorite]) -> Result<(), String> {
@@ -103,7 +106,9 @@ fn decode_list<T: serde::de::DeserializeOwned>(
     label: &str,
 ) -> Result<Vec<T>, String> {
     match raw {
-        Some(json) => serde_json::from_str(&json).map_err(|e| format!("저장된 {label}이 손상됨: {e}")),
+        Some(json) => {
+            serde_json::from_str(&json).map_err(|e| format!("저장된 {label}이 손상됨: {e}"))
+        }
         None => Ok(Vec::new()),
     }
 }

@@ -14,8 +14,8 @@ use std::process::{Child, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use portbridge_core::model::Forwarding;
-use portbridge_core::tunnel::{TunnelProcess, TunnelSpawner};
 use portbridge_core::model::PortBridgeError;
+use portbridge_core::tunnel::{TunnelProcess, TunnelSpawner};
 
 /// `std::process::Child` 기반 [`TunnelProcess`]. stderr는 별도 스레드로 드레인해
 /// 조기 사망 시 사유를 스냅샷으로 제공한다(파이프 포화 방지).
