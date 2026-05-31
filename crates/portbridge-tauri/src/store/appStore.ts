@@ -113,10 +113,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   saveServers: async (servers) => {
+    // 낙관적 업데이트 — 연속 호출(add/update/delete)이 await 사이에 stale `get()`을
+    // 읽어 쓰기가 유실되지 않도록 로컬을 먼저 반영하고, 저장 실패 시 롤백한다.
+    const prev = get().servers;
+    set({ servers });
     try {
       await api.serverSave(servers);
-      set({ servers });
     } catch (e) {
+      set({ servers: prev });
       get().pushError(toMessage(e));
     }
   },
@@ -162,18 +166,22 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   toggleFavorite: async (serverId, remotePort) => {
-    const exists = get().favorites.some(
+    // 낙관적 업데이트 — 빠른 연속 토글이 stale `get().favorites`를 읽어 꼬이지 않도록
+    // 로컬을 먼저 반영하고, 저장 실패 시 롤백한다.
+    const prev = get().favorites;
+    const exists = prev.some(
       (f) => f.serverId === serverId && f.remotePort === remotePort,
     );
     const next: Favorite[] = exists
-      ? get().favorites.filter(
+      ? prev.filter(
           (f) => !(f.serverId === serverId && f.remotePort === remotePort),
         )
-      : [...get().favorites, { serverId, remotePort }];
+      : [...prev, { serverId, remotePort }];
+    set({ favorites: next });
     try {
       await api.favoritesSave(next);
-      set({ favorites: next });
     } catch (e) {
+      set({ favorites: prev });
       get().pushError(toMessage(e));
     }
   },
