@@ -5,6 +5,7 @@ pub mod persistence;
 pub mod platform;
 pub mod scan;
 pub mod ssh_config;
+pub mod tunnel;
 pub mod update;
 pub mod version;
 
