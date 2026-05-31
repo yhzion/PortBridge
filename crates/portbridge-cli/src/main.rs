@@ -126,16 +126,16 @@ enum Commands {
 
     /// SSH 로컬 포트 포워딩(`ssh -L`)을 실행한다 (foreground; Ctrl-C로 종료)
     Tunnel {
-        /// SSH 접속 대상 (user@host)
+        /// SSH 접속 대상: `user@host`, 저장 서버 이름/id, 또는 `~/.ssh/config` Host alias
         target: String,
 
         /// 포워딩 스펙: `<local_port>:<remote_host>:<remote_port>`
         #[arg(short = 'L')]
         forward: String,
 
-        /// SSH 포트
-        #[arg(short, long, default_value_t = 22)]
-        port: u16,
+        /// SSH 포트 (미지정 시 저장 서버/alias의 Port, 그것도 없으면 22)
+        #[arg(short, long)]
+        port: Option<u16>,
     },
 }
 
@@ -302,7 +302,8 @@ fn main() {
             range,
             json,
         } => {
-            let server = build_scan_server(&target, port).unwrap_or_else(|msg| {
+            let store = store::FileStore::new(store::config_dir());
+            let server = resolve_server(&store, &target, port).unwrap_or_else(|msg| {
                 eprintln!("error: {msg}");
                 std::process::exit(1);
             });
@@ -333,21 +334,15 @@ fn main() {
             forward,
             port,
         } => {
-            let (user, host) = split_target(&target).unwrap_or_else(|| {
-                eprintln!("error: target must be in user@host format");
+            let store = store::FileStore::new(store::config_dir());
+            let server = resolve_server(&store, &target, port).unwrap_or_else(|msg| {
+                eprintln!("error: {msg}");
                 std::process::exit(1);
             });
             let spec = parse_forward_spec(&forward).unwrap_or_else(|msg| {
                 eprintln!("error: {msg}");
                 std::process::exit(1);
             });
-            let server = Server {
-                id: format!("{user}@{host}"),
-                name: None,
-                user,
-                host,
-                port,
-            };
 
             match start_tunnel(&server, &spec) {
                 Ok((forwarding, mut child, drain)) => {
@@ -501,27 +496,47 @@ fn start_tunnel(
 
 /// 스캔 대상을 `Server`로 해석한다.
 ///
-/// `@` 포함 → `user@host` 직접 입력. bare 토큰 → `~/.ssh/config`의 Host alias로
-/// core `resolve_host`를 **소비**해 구성한다(cli는 ssh-config를 직접 파싱하지 않음, §7.3).
-fn build_scan_server(target: &str, explicit_port: Option<u16>) -> Result<Server, String> {
+/// 대상 토큰을 `Server`로 해석한다 (scan/tunnel 공용).
+///
+/// 우선순위: `@` 포함 → literal `user@host`. bare 토큰 → ① 저장 서버의 name/id 일치,
+/// 없으면 ② `~/.ssh/config`의 Host alias(core `resolve_host` 소비), 둘 다 없으면 에러.
+/// name↔alias 충돌 시 사용자가 명시 저장한 저장 서버를 우선한다.
+///
+/// 포트 우선순위: 명시 `--port`/`-p` > 저장 서버·config Port > 22.
+fn resolve_server(
+    p: &dyn Persistence,
+    target: &str,
+    explicit_port: Option<u16>,
+) -> Result<Server, String> {
     if target.contains('@') {
         let (user, host) =
             split_target(target).ok_or_else(|| "target must be in user@host format".to_string())?;
-        Ok(Server {
+        return Ok(Server {
             id: format!("{user}@{host}"),
             name: None,
             user,
             host,
             port: explicit_port.unwrap_or(22),
-        })
-    } else {
-        match resolve_host(&HostPlatform, target) {
-            Ok(Some(resolved)) => server_from_resolved(target, resolved, explicit_port),
-            Ok(None) => Err(format!(
-                "no Host alias '{target}' in ~/.ssh/config (use user@host)"
-            )),
-            Err(error) => Err(error.to_string()),
+        });
+    }
+
+    // ① 저장 서버 (name 또는 id)
+    let servers = store::load_servers(p)?;
+    if let Some(saved) = store::find(&servers, target) {
+        let mut server = saved.clone();
+        if let Some(port) = explicit_port {
+            server.port = port;
         }
+        return Ok(server);
+    }
+
+    // ② ssh-config Host alias
+    match resolve_host(&HostPlatform, target) {
+        Ok(Some(resolved)) => server_from_resolved(target, resolved, explicit_port),
+        Ok(None) => Err(format!(
+            "no saved server or ~/.ssh/config alias '{target}' (use user@host)"
+        )),
+        Err(error) => Err(error.to_string()),
     }
 }
 
@@ -721,9 +736,59 @@ mod tests {
         assert!(err.contains("User"));
     }
 
+    /// 단위 테스트용 인메모리 [`Persistence`] — 미리 주입한 서버 목록을 돌려준다.
+    struct FakePersistence {
+        servers_json: Option<String>,
+    }
+
+    impl FakePersistence {
+        fn empty() -> Self {
+            Self { servers_json: None }
+        }
+
+        fn with(servers: &[Server]) -> Self {
+            Self {
+                servers_json: Some(serde_json::to_string(servers).unwrap()),
+            }
+        }
+    }
+
+    impl Persistence for FakePersistence {
+        fn load(
+            &self,
+            key: &str,
+        ) -> Result<Option<String>, portbridge_core::persistence::PersistenceError> {
+            if key == portbridge_core::persistence::SERVERS_KEY {
+                Ok(self.servers_json.clone())
+            } else {
+                Ok(None)
+            }
+        }
+
+        fn save(
+            &self,
+            _key: &str,
+            _value: &str,
+        ) -> Result<(), portbridge_core::persistence::PersistenceError> {
+            Ok(())
+        }
+    }
+
+    fn saved_server(name: Option<&str>, user: &str, host: &str, port: u16) -> Server {
+        Server {
+            id: format!("id-{host}-{port}"),
+            name: name.map(str::to_string),
+            user: user.to_string(),
+            host: host.to_string(),
+            port,
+        }
+    }
+
+    // ── resolve_server: user@host literal ──────────────────────────────────
+
     #[test]
     fn user_host_target_builds_server_with_default_port() {
-        let server = build_scan_server("deploy@10.0.0.1", None).unwrap();
+        let server = resolve_server(&FakePersistence::empty(), "deploy@10.0.0.1", None).unwrap();
         assert_eq!(server.user, "deploy");
         assert_eq!(server.host, "10.0.0.1");
         assert_eq!(server.port, 22);
@@ -732,14 +797,49 @@ mod tests {
 
     #[test]
     fn user_host_target_uses_explicit_port() {
-        let server = build_scan_server("deploy@10.0.0.1", Some(2022)).unwrap();
+        let server =
+            resolve_server(&FakePersistence::empty(), "deploy@10.0.0.1", Some(2022)).unwrap();
         assert_eq!(server.port, 2022);
     }
 
     #[test]
     fn malformed_user_host_target_is_error() {
-        assert!(build_scan_server("@host", None).is_err());
+        assert!(resolve_server(&FakePersistence::empty(), "@host", None).is_err());
     }
+
+    // ── resolve_server: 저장 서버 (name/id) ────────────────────────────────
+
+    /// bare 토큰이 저장 서버 name과 일치하면 그 서버(포트 포함)를 쓴다.
+    #[test]
+    fn bare_target_matches_saved_server_by_name() {
+        let p = FakePersistence::with(&[saved_server(Some("prod"), "ubuntu", "10.0.0.1", 2222)]);
+        let server = resolve_server(&p, "prod", None).unwrap();
+        assert_eq!(server.user, "ubuntu");
+        assert_eq!(server.host, "10.0.0.1");
+        assert_eq!(server.port, 2222);
+    }
+
+    /// 저장 서버를 id로도 찾을 수 있다.
+    #[test]
+    fn bare_target_matches_saved_server_by_id() {
+        let p = FakePersistence::with(&[saved_server(Some("prod"), "ubuntu", "10.0.0.1", 2222)]);
+        let server = resolve_server(&p, "id-10.0.0.1-2222", None).unwrap();
+        assert_eq!(server.host, "10.0.0.1");
+    }
+
+    /// 명시 포트는 저장 서버 포트를 override한다.
+    #[test]
+    fn explicit_port_overrides_saved_server_port() {
+        let p = FakePersistence::with(&[saved_server(Some("prod"), "ubuntu", "10.0.0.1", 2222)]);
+        let server = resolve_server(&p, "prod", Some(2022)).unwrap();
+        assert_eq!(server.port, 2022);
+    }
+
+    // 주: "저장도 alias도 없을 때 에러" 경로는 `resolve_server`가 실제 `~/.ssh/config`를
+    // 읽는 `resolve_host(&HostPlatform, ..)`로 폴백하므로 환경 의존적이다(예: `Host *`
+    // 와일드카드가 있으면 임의 토큰도 매칭). 환경 독립 단위 테스트로 만들려면 플랫폼
+    // 주입이 필요하며, 이는 별도 정리 트랙으로 둔다. alias 매핑 자체는 `server_from_resolved`
+    // 순수 테스트가 커버한다.
 
     // ── tunnel (-L 파싱 + Forwarding 구성) ─────────────────────────────────
 
