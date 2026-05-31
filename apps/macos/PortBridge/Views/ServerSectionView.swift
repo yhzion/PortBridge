@@ -321,9 +321,12 @@ private struct AuthFailedView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
-            Label(String(localized: "server.section.authFailed.title", defaultValue: "SSH 키 인증 실패"), systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            Label(
+                String(localized: "server.section.authFailed.title", defaultValue: "SSH 키 인증 실패"),
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
             HStack(spacing: PBLayout.Space.s2) {
                 Text(verbatim: copyCommand)
                     .font(.system(.caption, design: .monospaced))
@@ -341,8 +344,14 @@ private struct AuthFailedView: View {
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
-                .help(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(localized: "common.copy", defaultValue: "복사"))
-                .accessibilityLabel(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(localized: "server.section.authFailed.copyCommand.accessibility", defaultValue: "명령 복사"))
+                .help(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
+                    localized: "common.copy",
+                    defaultValue: "복사"
+                ))
+                .accessibilityLabel(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
+                    localized: "server.section.authFailed.copyCommand.accessibility",
+                    defaultValue: "명령 복사"
+                ))
             }
         }
         .padding(.vertical, PBLayout.Space.s1)
@@ -368,9 +377,12 @@ private struct ToolInstallGuideView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
-            Label(String(localized: "server.section.toolMissing.title", defaultValue: "원격 서버에 ss 또는 lsof가 필요합니다"), systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            Label(
+                String(localized: "server.section.toolMissing.title", defaultValue: "원격 서버에 ss 또는 lsof가 필요합니다"),
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
 
             Text(String(localized: "server.section.toolMissing.description", defaultValue: "포트 목록을 조회하려면 둘 중 하나가 설치되어 있어야 합니다."))
                 .font(.caption2)

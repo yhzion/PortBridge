@@ -117,8 +117,8 @@ struct PortConflictSheet: View {
                 localized: "content.conflict.prompt",
                 defaultValue: "다른 로컬 포트를 입력하세요. 리모트는 \(serverDisplayName ?? String(localized: "common.serverFallback", defaultValue: "서버")):\(conflict.remotePort)."
             ))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
             TextField(String(localized: "content.conflict.localPortField", defaultValue: "로컬 포트"), text: $localPortText)
                 .textFieldStyle(.roundedBorder)
             if let message = validationMessage {

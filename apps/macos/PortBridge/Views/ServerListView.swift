@@ -71,7 +71,10 @@ struct ServerListView: View {
             let label = server.name ?? server.host
             let active = activeForwardingCount(for: server.id)
             if active > 0 {
-                Text(String(localized: "serverList.deleteConfirm.messageActive", defaultValue: "'\(label)'을(를) 삭제하면 활성 포워딩 \(active)개가 종료됩니다. 이 동작은 되돌릴 수 없습니다."))
+                Text(String(
+                    localized: "serverList.deleteConfirm.messageActive",
+                    defaultValue: "'\(label)'을(를) 삭제하면 활성 포워딩 \(active)개가 종료됩니다. 이 동작은 되돌릴 수 없습니다."
+                ))
             } else {
                 Text(String(localized: "serverList.deleteConfirm.message", defaultValue: "'\(label)'을(를) 삭제하시겠습니까? 이 동작은 되돌릴 수 없습니다."))
             }

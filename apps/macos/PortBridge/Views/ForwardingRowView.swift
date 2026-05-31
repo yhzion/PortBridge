@@ -69,7 +69,10 @@ struct ForwardingRowView: View {
             .accessibilityLabel(isFavorite
                 ? String(localized: "forwarding.row.favorite.a11yRemove", defaultValue: "즐겨찾기 해제")
                 : String(localized: "forwarding.row.favorite.a11yAdd", defaultValue: "즐겨찾기 추가"))
-            .help(isFavorite ? String(localized: "forwarding.row.favorite.helpRemove", defaultValue: "즐겨찾기에서 제거") : String(localized: "forwarding.row.favorite.helpAdd", defaultValue: "즐겨찾기에 추가"))
+            .help(isFavorite ? String(localized: "forwarding.row.favorite.helpRemove", defaultValue: "즐겨찾기에서 제거") : String(
+                localized: "forwarding.row.favorite.helpAdd",
+                defaultValue: "즐겨찾기에 추가"
+            ))
 
             Button(action: onToggle) {
                 HStack(alignment: .center, spacing: 10) {

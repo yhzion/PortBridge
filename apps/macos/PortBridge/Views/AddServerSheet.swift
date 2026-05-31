@@ -65,17 +65,23 @@ struct AddServerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PBLayout.Space.s4) {
-            Text(editing == nil ? String(localized: "addServer.title.add", defaultValue: "서버 추가") : String(localized: "addServer.title.edit", defaultValue: "서버 편집"))
-                .font(.headline)
+            Text(editing == nil ? String(localized: "addServer.title.add", defaultValue: "서버 추가") : String(
+                localized: "addServer.title.edit",
+                defaultValue: "서버 편집"
+            ))
+            .font(.headline)
 
             Form {
-                TextField(text: $name, prompt: Text(String(localized: "addServer.name.prompt", defaultValue: "선택사항"))) { Text(String(localized: "addServer.name.label", defaultValue: "이름")) }
+                TextField(text: $name, prompt: Text(String(localized: "addServer.name.prompt", defaultValue: "선택사항"))) { Text(String(
+                    localized: "addServer.name.label",
+                    defaultValue: "이름"
+                )) }
                 TextField(text: $user, prompt: Text("user")) { Text(String(localized: "addServer.user.label", defaultValue: "사용자")) }
                     .disableAutocorrection(true)
                 TextField(text: $host, prompt: Text(String(localized: "addServer.host.prompt", defaultValue: "hostname 또는 IP"))) {
                     Text(String(localized: "addServer.host.label", defaultValue: "호스트"))
                 }
-                    .disableAutocorrection(true)
+                .disableAutocorrection(true)
                 TextField(text: $portText, prompt: Text("22")) { Text(String(localized: "addServer.port.label", defaultValue: "포트")) }
                 if !portText.isEmpty && parsedPort == nil {
                     Text(String(localized: "addServer.port.invalid", defaultValue: "1–65535 범위의 숫자여야 합니다"))
@@ -83,9 +89,12 @@ struct AddServerSheet: View {
                         .foregroundStyle(.red)
                 }
                 if isDuplicateInput {
-                    Text(String(localized: "addServer.duplicate", defaultValue: "이미 등록된 서버입니다 (\(trimmedUser)@\(trimmedHost):\(parsedPort ?? 22))"))
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    Text(String(
+                        localized: "addServer.duplicate",
+                        defaultValue: "이미 등록된 서버입니다 (\(trimmedUser)@\(trimmedHost):\(parsedPort ?? 22))"
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.red)
                 }
             }
             .formStyle(.grouped)
@@ -94,7 +103,10 @@ struct AddServerSheet: View {
                 Spacer()
                 Button(String(localized: "common.cancel", defaultValue: "취소")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(editing == nil ? String(localized: "addServer.save.add", defaultValue: "추가") : String(localized: "addServer.save.edit", defaultValue: "저장")) {
+                Button(editing == nil ? String(localized: "addServer.save.add", defaultValue: "추가") : String(
+                    localized: "addServer.save.edit",
+                    defaultValue: "저장"
+                )) {
                     let server = Server(
                         id: editing?.id ?? UUID(),
                         name: name.trimmingCharacters(in: .whitespaces).isEmpty ? nil : name.trimmingCharacters(in: .whitespaces),

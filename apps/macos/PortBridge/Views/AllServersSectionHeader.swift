@@ -12,15 +12,24 @@ struct AllServersSectionHeader: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(.tint)
             Spacer()
-            Button(allExpanded ? String(localized: "allServers.collapseAll", defaultValue: "모두 접기") : String(localized: "allServers.expandAll", defaultValue: "모두 펼치기"), action: onToggleAll)
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .font(.caption)
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-                .help(allExpanded ? String(localized: "allServers.collapseAll.help", defaultValue: "모두 접기 (⌘⇧E)") : String(localized: "allServers.expandAll.help", defaultValue: "모두 펼치기 (⌘⇧E)"))
-                .accessibilityLabel(allExpanded
-                    ? String(localized: "allServers.collapseAll.a11y", defaultValue: "모든 서버 접기")
-                    : String(localized: "allServers.expandAll.a11y", defaultValue: "모든 서버 펼치기"))
+            Button(
+                allExpanded ? String(localized: "allServers.collapseAll", defaultValue: "모두 접기") : String(
+                    localized: "allServers.expandAll",
+                    defaultValue: "모두 펼치기"
+                ),
+                action: onToggleAll
+            )
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .font(.caption)
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .help(allExpanded ? String(localized: "allServers.collapseAll.help", defaultValue: "모두 접기 (⌘⇧E)") : String(
+                localized: "allServers.expandAll.help",
+                defaultValue: "모두 펼치기 (⌘⇧E)"
+            ))
+            .accessibilityLabel(allExpanded
+                ? String(localized: "allServers.collapseAll.a11y", defaultValue: "모든 서버 접기")
+                : String(localized: "allServers.expandAll.a11y", defaultValue: "모든 서버 펼치기"))
         }
     }
 }
