@@ -16,9 +16,8 @@ final class ServerSectionViewModelTests: XCTestCase {
 
     @MainActor
     func test_scan_success_setsLoaded() async {
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(exitCode: 0, stdout: "LISTEN 0 128 0.0.0.0:3000 0.0.0.0:*", stderr: "")
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 0, stdout: "LISTEN 0 128 0.0.0.0:3000 0.0.0.0:*", stderr: "")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
@@ -31,9 +30,8 @@ final class ServerSectionViewModelTests: XCTestCase {
 
     @MainActor
     func test_scan_authFailed_setsAuthFailed() async {
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(exitCode: 255, stdout: "", stderr: "Permission denied (publickey).")
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 255, stdout: "", stderr: "Permission denied (publickey).")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
@@ -46,9 +44,8 @@ final class ServerSectionViewModelTests: XCTestCase {
 
     @MainActor
     func test_scan_connectTimeout_setsOffline() async {
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(exitCode: 255, stdout: "", stderr: "Connection timed out")
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 255, stdout: "", stderr: "Connection timed out")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
@@ -60,9 +57,8 @@ final class ServerSectionViewModelTests: XCTestCase {
 
     @MainActor
     func test_ports_whenLoaded_returnsPorts() async {
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(exitCode: 0, stdout: "LISTEN 0 128 0.0.0.0:8080 0.0.0.0:*", stderr: "")
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 0, stdout: "LISTEN 0 128 0.0.0.0:8080 0.0.0.0:*", stderr: "")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
@@ -95,9 +91,8 @@ final class ServerSectionViewModelTests: XCTestCase {
 
     @MainActor
     func test_scan_noRouteToHost_setsOffline() async {
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: No route to host")
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 255, stdout: "", stderr: "ssh: connect to host prod port 22: No route to host")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
@@ -107,9 +102,8 @@ final class ServerSectionViewModelTests: XCTestCase {
 
     @MainActor
     func test_scan_toolsMissing_setsToolMissing() async {
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(exitCode: 127, stdout: "", stderr: "PORTBRIDGE_TOOLS_MISSING")
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 127, stdout: "", stderr: "PORTBRIDGE_TOOLS_MISSING")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()
@@ -120,9 +114,8 @@ final class ServerSectionViewModelTests: XCTestCase {
     /// (Linux는 "Connection timed out"). 두 표기 모두 .offline(false)로 분류되어야 함.
     @MainActor
     func test_scan_operationTimedOut_setsOffline() async {
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(
                 exitCode: 255,
                 stdout: "",
                 stderr: "ssh: connect to host 10.0.0.1 port 22: Operation timed out\n"
@@ -139,10 +132,9 @@ final class ServerSectionViewModelTests: XCTestCase {
     @MainActor
     func test_scan_fromOffline_silentlyRetries() async {
         // 첫 스캔: 오프라인
-        let mock = MockCommandRunner()
-        await mock.setResponses([
-            CommandResult(exitCode: 255, stdout: "", stderr: "No route to host"),
-            CommandResult(exitCode: 255, stdout: "", stderr: "No route to host")
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 255, stdout: "", stderr: "No route to host"),
+            CommandResultDto(exitCode: 255, stdout: "", stderr: "No route to host")
         ])
         let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
         await vm.scan()

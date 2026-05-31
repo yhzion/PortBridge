@@ -31,7 +31,7 @@ final class AppViewModelFavoritesTests: XCTestCase {
         )
         return AppViewModel(
             store: serverStore,
-            scanner: PortScanner(runner: MockCommandRunner()),
+            scanner: PortScanner(runner: MockFfiCommandRunner()),
             tunnels: tunnels ?? MockTunnelManager(),
             favorites: favoriteStore,
             preferences: preferences

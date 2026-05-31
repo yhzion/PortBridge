@@ -83,7 +83,7 @@ final class AppViewModel {
         updates: UpdateChecker? = nil
     ) {
         self.store = store ?? ServerStore()
-        self.scanner = scanner ?? PortScanner(runner: ProcessCommandRunner())
+        self.scanner = scanner ?? PortScanner(runner: BlockingProcessRunner())
         let manager: TunnelManaging = tunnels ?? TunnelManager()
         self.tunnels = manager
         self.favorites = favorites ?? FavoriteStore()

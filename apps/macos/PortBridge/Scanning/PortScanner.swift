@@ -1,94 +1,52 @@
 // PortBridge/Scanning/PortScanner.swift
 import Foundation
 
+/// Thin adapter over the core scan via the `scanPorts` FFI. SSH arg
+/// construction, stderr classification, parsing, dedup, range filtering all
+/// live in core — this type only marshals types and hops the sync FFI call
+/// onto a background thread.
 nonisolated struct PortScanner {
-    let runner: CommandRunner
-    let sshExecutable: String = "/usr/bin/ssh"
+    let runner: FfiCommandRunner
 
-    func scan(server: Server, range: ClosedRange<Int> = 1000 ... 65535) async throws -> [RemotePort] {
-        let remoteCommand = """
-        if ! command -v ss >/dev/null 2>&1 && ! command -v lsof >/dev/null 2>&1; then
-          echo PORTBRIDGE_TOOLS_MISSING >&2
-          exit 127
-        fi
-        ss -tlnpH 2>/dev/null || lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null
-        """
-        let args = [
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=10",
-            "-p", "\(server.port)",
-            server.sshTarget,
-            remoteCommand
-        ]
-
-        let result = try await runner.run(sshExecutable, args: args, timeout: 15)
-
-        if result.exitCode != 0 {
-            let stderr = result.stderr.lowercased()
-
-            // 1. 인증 실패 (최우선)
-            if stderr.contains("permission denied") || stderr.contains("publickey") {
-                throw PortBridgeError.sshAuthFailed(host: server.host)
-            }
-
-            // 2. 도달 불가 패턴 통합 (timeout 포함)
-            // macOS BSD 소켓은 "Operation timed out", Linux는 "Connection timed out" 사용 — 둘 다 매칭.
-            let unreachablePatterns = [
-                "connection timed out", "connect timeout", "operation timed out",
-                "no route to host",
-                "connection refused",
-                "could not resolve hostname", "name or service not known",
-                "network is unreachable",
-                "host is down"
-            ]
-            if unreachablePatterns.contains(where: { stderr.contains($0) }) {
-                throw PortBridgeError.serverUnreachable(host: server.host, reason: result.stderr)
-            }
-
-            // 3. 도구 부재
-            if result.exitCode == 127 || stderr.contains("portbridge_tools_missing") {
-                throw PortBridgeError.remoteToolsMissing
-            }
-        }
-
-        let first = result.stdout.components(separatedBy: .newlines).first ?? ""
-        let parsed: [RemotePort] = if first.uppercased().hasPrefix("LISTEN") || first.contains("State") {
-            ScanOutputParser.parseSS(result.stdout)
-        } else {
-            ScanOutputParser.parseLsof(result.stdout)
-        }
-
-        let deduped = Self.deduplicateSamePort(parsed)
-        return deduped
-            .filter { range.contains($0.port) }
-            .sorted { $0.port < $1.port }
-    }
-
-    private static func deduplicateSamePort(_ ports: [RemotePort]) -> [RemotePort] {
-        let grouped = Dictionary(grouping: ports, by: \.port)
-        return grouped.map { port, matches in
-            RemotePort(
-                port: port,
-                address: representativeAddress(for: matches),
-                processName: matches.first { port in
-                    guard let name = port.processName else { return false }
-                    return !name.isEmpty
-                }?.processName
+    func scan(server: Server) async throws -> [RemotePort] {
+        guard let port = UInt16(exactly: server.port) else {
+            throw PortBridgeError.serverUnreachable(
+                host: server.host,
+                reason: "포트 번호가 범위를 벗어났습니다: \(server.port)"
             )
         }
+
+        let dto = ServerDto(
+            id: server.id.uuidString,
+            name: server.name,
+            user: server.user,
+            host: server.host,
+            port: port
+        )
+
+        nonisolated(unsafe) let runner = runner
+        nonisolated(unsafe) let serverDto = dto
+
+        return try await Task.detached {
+            do {
+                let result = try scanPorts(runner: runner, server: serverDto)
+                return result.map {
+                    RemotePort(port: Int($0.port), address: $0.address, processName: $0.processName)
+                }
+            } catch let error as PortBridgeFfiError {
+                throw Self.map(error)
+            }
+        }.value
     }
 
-    private static func representativeAddress(for ports: [RemotePort]) -> String {
-        let addresses = ports.map(\.address)
-        if addresses.contains("0.0.0.0") || addresses.contains("::") {
-            return "0.0.0.0"
+    private static func map(_ error: PortBridgeFfiError) -> PortBridgeError {
+        switch error {
+        case .SshAuthFailed(let host):
+            return .sshAuthFailed(host: host)
+        case .ServerUnreachable(let host, let reason):
+            return .serverUnreachable(host: host, reason: reason)
+        case .RemoteToolsMissing:
+            return .remoteToolsMissing
         }
-        if addresses.contains("127.0.0.1") {
-            return "127.0.0.1"
-        }
-        if addresses.contains("::1") {
-            return "::1"
-        }
-        return addresses.min() ?? ""
     }
 }
