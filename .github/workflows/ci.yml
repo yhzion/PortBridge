@@ -30,22 +30,40 @@ jobs:
       # PortBridgeUITests are excluded on purpose: slow / window-server
       # dependent / flaky on CI. Scope to the unit/parity target only.
       #
-      # Ad-hoc sign ("-"): a host-based test (TEST_HOST = PortBridge.app) needs a
-      # signed host app or LaunchServices refuses to (re)launch it on the runner.
-      # CODE_SIGNING_ALLOWED=NO left it unsigned → "Could not launch
-      # PortBridgeTests". Mirror release.yml's `codesign --sign -` via build
-      # settings (no real cert on the runner).
-      - name: Run PortBridgeTests (Swift parity)
+      # PortBridgeTests is host-based (TEST_HOST = PortBridge.app). An unsigned
+      # host app makes LaunchServices refuse to (re)launch it on the runner
+      # ("Could not launch PortBridgeTests", IDELaunchServicesLauncher err 20).
+      # Build settings alone (CODE_SIGN_IDENTITY="-") did not satisfy it, so we
+      # split: build-for-testing → explicit ad-hoc codesign of the .app AND the
+      # .xctest bundles (release.yml's `codesign --force --deep --sign -`
+      # pattern) → test-without-building.
+      - name: Build for testing
         run: |
           set -euo pipefail
-          xcodebuild test \
+          xcodebuild build-for-testing \
+            -project apps/macos/PortBridge.xcodeproj \
+            -scheme PortBridge \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Ad-hoc sign host app and test bundles
+        run: |
+          set -euo pipefail
+          PRODUCTS=build/Build/Products/Debug
+          find "$PRODUCTS" -name '*.xctest' -print0 \
+            | xargs -0 -I{} codesign --force --deep --sign - "{}"
+          codesign --force --deep --sign - "$PRODUCTS/PortBridge.app"
+
+      - name: Test without building (Swift parity)
+        run: |
+          set -euo pipefail
+          xcodebuild test-without-building \
             -project apps/macos/PortBridge.xcodeproj \
             -scheme PortBridge \
             -destination 'platform=macOS' \
             -only-testing:PortBridgeTests \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=YES
+            -derivedDataPath build
 
   # Cross-platform bindgen proof on Linux: the dylib extension is .so here.
   ffi-bindings:
