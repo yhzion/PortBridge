@@ -21,6 +21,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # build-ffi.sh runs as an Xcode build phase and shells out to cargo; pin a
+      # toolchain so it resolves even if the runner image changes.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Build Release app
         run: |
           set -euo pipefail

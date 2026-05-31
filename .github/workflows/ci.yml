@@ -1,0 +1,128 @@
+name: CI (FFI parity & packaging)
+
+# Cross-platform jobs that complement the cargo matrix in rust.yml:
+#   - macos-parity : keystone — runs Swift PortBridgeTests against the
+#                    Xcode-integrated UniFFI bindings (#58/#59/#61/#62 parity).
+#   - ffi-bindings : cross-platform proof that uniffi-bindgen emits Swift from
+#                    the Linux dylib (.so), no Xcode required.
+#   - tauri-build  : Win/Linux desktop build matrix (#31).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # ★ keystone: the real execution site of the "parity is verified in #60 CI"
+  # promise. build-ffi.sh runs as an Xcode build phase (cargo build +
+  # uniffi-bindgen), then PortBridgeTests imports the generated bindings.
+  macos-parity:
+    name: macOS Swift parity (PortBridgeTests)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # macos runners ship cargo, but pin stable explicitly so build-ffi.sh
+      # (which prepends ~/.cargo/bin) always resolves a toolchain.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # PortBridgeUITests are excluded on purpose: slow / window-server
+      # dependent / flaky on CI. Scope to the unit/parity target only.
+      - name: Run PortBridgeTests (Swift parity)
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project apps/macos/PortBridge.xcodeproj \
+            -scheme PortBridge \
+            -destination 'platform=macOS' \
+            -only-testing:PortBridgeTests \
+            CODE_SIGNING_ALLOWED=NO
+
+  # Cross-platform bindgen proof on Linux: the dylib extension is .so here.
+  ffi-bindings:
+    name: FFI bindings (Linux, .so)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build portbridge-ffi
+        run: cargo build -p portbridge-ffi --verbose
+
+      - name: Generate Swift bindings
+        run: |
+          set -euo pipefail
+          cargo run -p portbridge-ffi --bin uniffi-bindgen -- \
+            generate --library target/debug/libportbridge_ffi.so \
+            --language swift --out-dir target/generated-swift
+
+      - name: Assert generated artifacts exist
+        run: |
+          set -euo pipefail
+          for f in \
+            portbridge_ffi.swift \
+            portbridge_ffiFFI.h \
+            portbridge_ffiFFI.modulemap; do
+            test -s "target/generated-swift/$f" \
+              || { echo "missing or empty: target/generated-swift/$f" >&2; exit 1; }
+          done
+          echo "all bindgen artifacts present"
+
+  # #31 is merged (real desktop app, not a placeholder). portbridge-tauri is a
+  # standalone [workspace] excluded from the root cargo matrix, so it builds in
+  # its own job. tauri CLI is not installed — `cargo build` covers the Rust
+  # side; the frontend dist must exist first (generate_context! embeds it).
+  tauri-build:
+    name: Tauri build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: crates/portbridge-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: crates/portbridge-tauri/package-lock.json
+
+      # Tauri v2 Linux system deps (Ubuntu 24.04 — webkit2gtk 4.1).
+      - name: Install Linux system deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install frontend deps
+        run: npm ci
+
+      # Produces ../dist, which src-tauri's generate_context! embeds at compile
+      # time — must run before cargo build.
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri (cargo)
+        working-directory: crates/portbridge-tauri/src-tauri
+        run: cargo build --verbose
