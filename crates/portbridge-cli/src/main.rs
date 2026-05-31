@@ -11,9 +11,12 @@ use std::time::{Duration, Instant, SystemTime};
 use clap::Parser;
 
 use portbridge_core::model::{Forwarding, PortBridgeError, RemotePort, Server, State};
+use portbridge_core::persistence::Persistence;
 use portbridge_core::platform::HostPlatform;
 use portbridge_core::scan::{self, CommandError, CommandResult, CommandRunner};
 use portbridge_core::ssh_config::{resolve_host, ResolvedHost};
+
+mod store;
 
 // ── ProcessRunner: std::process::Command 기반 CommandRunner 구현 ──────────
 
@@ -97,6 +100,12 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Commands {
+    /// 저장된 서버를 관리한다 (영속 저장: add/ls/rm/show)
+    Server {
+        #[command(subcommand)]
+        action: ServerCmd,
+    },
+
     /// 원격 서버의 수신 포트를 스캔한다
     Scan {
         /// SSH 접속 대상: `user@host` 또는 `~/.ssh/config`의 Host alias
@@ -132,10 +141,161 @@ enum Commands {
 
 // ── 메인 ────────────────────────────────────────────────────────────────
 
+// ── server 서브커맨드 ────────────────────────────────────────────────────
+
+#[derive(clap::Subcommand)]
+enum ServerCmd {
+    /// 서버를 저장한다
+    Add {
+        /// SSH 접속 대상 (user@host)
+        target: String,
+        /// 표시 이름 (선택)
+        #[arg(long)]
+        name: Option<String>,
+        /// SSH 포트
+        #[arg(short, long, default_value_t = 22)]
+        port: u16,
+    },
+    /// 저장된 서버 목록
+    Ls {
+        /// 머신리더블 JSON으로 출력
+        #[arg(long)]
+        json: bool,
+    },
+    /// 서버 삭제 (id 또는 name)
+    Rm { ident: String },
+    /// 서버 상세 (id 또는 name)
+    Show { ident: String },
+}
+
+/// `server` 서브커맨드 디스패치 — 파일 저장소를 열고 액션을 실행한다(I/O 경계).
+fn run_server(action: ServerCmd) {
+    let store = store::FileStore::new(store::config_dir());
+    let result = match action {
+        ServerCmd::Add { target, name, port } => server_add(&store, &target, name, port),
+        ServerCmd::Ls { json } => server_ls(&store, json),
+        ServerCmd::Rm { ident } => server_rm(&store, &ident),
+        ServerCmd::Show { ident } => server_show(&store, &ident),
+    };
+    if let Err(msg) = result {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    }
+}
+
+/// 서버 식별자(CLI 내부 생성). 단일 사용자 환경에서 충분히 유일.
+fn new_server_id() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("srv-{nanos:x}")
+}
+
+/// 서버를 저장한다. `(user,host,port)` 중복은 거부(Desktop `isDuplicate` 동치).
+fn server_add(
+    p: &dyn Persistence,
+    target: &str,
+    name: Option<String>,
+    port: u16,
+) -> Result<(), String> {
+    let (user, host) =
+        split_target(target).ok_or_else(|| "target must be in user@host format".to_string())?;
+    let mut servers = store::load_servers(p)?;
+    if store::is_duplicate(&servers, &user, &host, port) {
+        return Err(format!("이미 저장된 서버: {user}@{host}:{port}"));
+    }
+    let id = new_server_id();
+    servers.push(Server {
+        id: id.clone(),
+        name,
+        user: user.clone(),
+        host: host.clone(),
+        port,
+    });
+    store::save_servers(p, &servers)?;
+    println!("저장됨: {id}  {user}@{host}:{port}");
+    Ok(())
+}
+
+/// 저장된 서버 목록을 테이블/JSON으로 출력한다.
+fn server_ls(p: &dyn Persistence, json: bool) -> Result<(), String> {
+    let servers = store::load_servers(p)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&servers).map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("{}", format_server_table(&servers));
+    }
+    Ok(())
+}
+
+/// id 또는 name으로 서버를 삭제한다. 일치 항목이 없으면 에러.
+fn server_rm(p: &dyn Persistence, ident: &str) -> Result<(), String> {
+    let mut servers = store::load_servers(p)?;
+    let before = servers.len();
+    servers.retain(|s| !(s.id == ident || s.name.as_deref() == Some(ident)));
+    if servers.len() == before {
+        return Err(format!("서버를 찾을 수 없음: {ident}"));
+    }
+    store::save_servers(p, &servers)?;
+    println!("삭제됨: {ident}");
+    Ok(())
+}
+
+/// id 또는 name으로 단건 서버 상세를 출력한다.
+fn server_show(p: &dyn Persistence, ident: &str) -> Result<(), String> {
+    let servers = store::load_servers(p)?;
+    match store::find(&servers, ident) {
+        Some(s) => {
+            println!("id:   {}", s.id);
+            println!("name: {}", s.name.as_deref().unwrap_or("-"));
+            println!("user: {}", s.user);
+            println!("host: {}", s.host);
+            println!("port: {}", s.port);
+            Ok(())
+        }
+        None => Err(format!("서버를 찾을 수 없음: {ident}")),
+    }
+}
+
+/// 저장된 서버를 ID / NAME / TARGET 테이블로 포맷한다(순수). `format_table`의 형제.
+fn format_server_table(servers: &[Server]) -> String {
+    let name_cell = |s: &Server| s.name.as_deref().unwrap_or("-").to_string();
+    let id_w = "ID"
+        .len()
+        .max(servers.iter().map(|s| s.id.len()).max().unwrap_or(0));
+    let name_w = "NAME".len().max(
+        servers
+            .iter()
+            .map(|s| name_cell(s).len())
+            .max()
+            .unwrap_or(0),
+    );
+
+    let mut out = format!("{:<id_w$} {:<name_w$} {}", "ID", "NAME", "TARGET");
+    for s in servers {
+        out.push('\n');
+        out.push_str(&format!(
+            "{:<id_w$} {:<name_w$} {}@{}:{}",
+            s.id,
+            name_cell(s),
+            s.user,
+            s.host,
+            s.port
+        ));
+    }
+    out
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Server { action } => run_server(action),
+
         Commands::Scan {
             target,
             port,
@@ -872,5 +1032,65 @@ mod tests {
             )
             .expect("대용량 출력도 회수해야 한다");
         assert_eq!(result.stdout.lines().count(), 100000);
+    }
+
+    // ── server CRUD ───────────────────────────────────────────────────────
+
+    /// 테이블: 헤더 정렬 + None name은 `-`, TARGET은 user@host:port.
+    #[test]
+    fn format_server_table_aligns_and_handles_none_name() {
+        let servers = vec![
+            Server {
+                id: "srv-1".into(),
+                name: Some("prod".into()),
+                user: "ubuntu".into(),
+                host: "10.0.0.1".into(),
+                port: 2222,
+            },
+            Server {
+                id: "srv-22".into(),
+                name: None,
+                user: "deploy".into(),
+                host: "h".into(),
+                port: 22,
+            },
+        ];
+        let lines: Vec<String> = format_server_table(&servers)
+            .lines()
+            .map(str::to_string)
+            .collect();
+        assert!(lines[0].starts_with("ID"));
+        assert!(lines[1].ends_with("ubuntu@10.0.0.1:2222"));
+        assert!(lines[2].contains(" - ") && lines[2].ends_with("deploy@h:22"));
+    }
+
+    /// add는 영속·중복 거부, rm은 name으로 삭제·부재 시 에러(엔드투엔드, 파일 백엔드).
+    #[test]
+    fn server_add_persists_rejects_dup_and_rm_removes() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_srv_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+
+        server_add(&p, "deploy@10.0.0.1", Some("prod".into()), 22).unwrap();
+        let servers = store::load_servers(&p).unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].name.as_deref(), Some("prod"));
+
+        // 같은 (user,host,port) 재추가 거부
+        assert!(server_add(&p, "deploy@10.0.0.1", None, 22).is_err());
+        // 같은 host 다른 port는 허용
+        server_add(&p, "deploy@10.0.0.1", None, 2222).unwrap();
+        assert_eq!(store::load_servers(&p).unwrap().len(), 2);
+
+        // name으로 삭제
+        server_rm(&p, "prod").unwrap();
+        assert_eq!(store::load_servers(&p).unwrap().len(), 1);
+        // 없는 것 삭제 → 에러
+        assert!(server_rm(&p, "prod").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
