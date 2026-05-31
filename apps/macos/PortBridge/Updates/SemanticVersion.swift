@@ -24,7 +24,14 @@ nonisolated struct SemanticVersion: Hashable {
     }
 
     /// Bridges to the FFI DTO so core (`updateAvailable`) can judge this version.
+    /// Components are always non-negative in practice (built via the u32-bounded
+    /// `init?(string:)`); `clamping` keeps the boundary total without trapping on
+    /// same-module misuse, mirroring the checked FFI conversions elsewhere.
     var ffiDto: SemanticVersionDto {
-        SemanticVersionDto(major: UInt32(major), minor: UInt32(minor), patch: UInt32(patch))
+        SemanticVersionDto(
+            major: UInt32(clamping: major),
+            minor: UInt32(clamping: minor),
+            patch: UInt32(clamping: patch)
+        )
     }
 }
