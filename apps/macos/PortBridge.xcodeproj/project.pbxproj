@@ -530,7 +530,7 @@
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"$(SRCROOT)/../../target/debug/libportbridge_ffi.a",
+					"$(SRCROOT)/../../target/release/libportbridge_ffi.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = youngho.jeon.PortBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
