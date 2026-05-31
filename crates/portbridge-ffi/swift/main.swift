@@ -1,18 +1,16 @@
-// PoC 소비자 — UniFFI 바인딩이 (1) payload-bearing 에러를 Swift catch로 전달하고
-// (2) Record/Optional을 자연스럽게 노출함을 런타임으로 증명한다.
+// PoC 소비자 — UniFFI 바인딩이 (1) Swift가 FfiCommandRunner(foreign trait)를 구현해
+// 주입하고, (2) payload-bearing 에러를 Swift catch로 전달하며, (3) Record/Optional을
+// 자연스럽게 노출함을 보인다. 실제 swiftc 컴파일/실행은 #59(macOS 툴체인) 소관이며,
+// 여기서는 생성 바인딩(scanPorts(runner:server:))과의 소스 정합만 보장한다.
 //
-// 빌드/실행 (crates/portbridge-ffi/ 에서):
-//   cargo build
-//   cargo run --bin uniffi-bindgen -- generate --library target/debug/libportbridge_ffi.dylib \
-//     --language swift --out-dir generated
-//   mkdir -p ffimod && cp generated/portbridge_ffiFFI.h ffimod/ \
-//     && cp generated/portbridge_ffiFFI.modulemap ffimod/module.modulemap
-//   swiftc -emit-executable -o poc_exe swift/main.swift generated/portbridge_ffi.swift \
-//     -I ffimod -L target/debug -lportbridge_ffi
-//   DYLD_LIBRARY_PATH=target/debug ./poc_exe
-// 기대 출력:
-//   PORT 8080 addr=0.0.0.0 proc=nginx
-//   CAUGHT ServerUnreachable host=prod reason=command timed out
+// 바인딩 생성 (crates/portbridge-ffi/ 에서):
+//   cargo build -p portbridge-ffi
+//   cargo run -p portbridge-ffi --bin uniffi-bindgen -- generate \
+//     --library ../../target/debug/libportbridge_ffi.dylib --language swift --out-dir <dir>
+//
+// 생성된 시그니처:
+//   func scanPorts(runner: FfiCommandRunner, server: ServerDto) throws -> [RemotePortDto]
+//   protocol FfiCommandRunner { func run(executable:args:timeout:) throws -> CommandResultDto }
 
 import Foundation
 
@@ -20,9 +18,31 @@ import Foundation
     import portbridge_ffiFFI
 #endif
 
+/// happy 경로: exit 0 + ss LISTEN 라인을 돌려주는 러너.
+final class OkRunner: FfiCommandRunner {
+    func run(executable: String, args: [String], timeout: TimeInterval) throws -> CommandResultDto {
+        CommandResultDto(
+            exitCode: 0,
+            stdout: "LISTEN 0 128 0.0.0.0:8080 0.0.0.0:* users:((\"nginx\",pid=1,fd=1))\n",
+            stderr: ""
+        )
+    }
+}
+
+/// error 경로: exit 255 + publickey stderr → core가 SshAuthFailed로 분류.
+final class AuthFailRunner: FfiCommandRunner {
+    func run(executable: String, args: [String], timeout: TimeInterval) throws -> CommandResultDto {
+        CommandResultDto(exitCode: 255, stdout: "", stderr: "Permission denied (publickey).")
+    }
+}
+
+func server() -> ServerDto {
+    ServerDto(id: "deploy@prod", name: nil, user: "deploy", host: "prod", port: 22)
+}
+
 func runOk() {
     do {
-        let ports = try scanPorts(user: "deploy", host: "prod", port: 8080)
+        let ports = try scanPorts(runner: OkRunner(), server: server())
         for p in ports {
             print("PORT \(p.port) addr=\(p.address) proc=\(p.processName ?? "nil")")
         }
@@ -33,11 +53,11 @@ func runOk() {
 
 func runErr() {
     do {
-        _ = try scanPorts(user: "deploy", host: "prod", port: 0)
+        _ = try scanPorts(runner: AuthFailRunner(), server: server())
     } catch let e as PortBridgeFfiError {
         switch e {
-        case .ServerUnreachable(let host, let reason):
-            print("CAUGHT ServerUnreachable host=\(host) reason=\(reason)")
+        case .SshAuthFailed(let host):
+            print("CAUGHT SshAuthFailed host=\(host)")
         default:
             print("CAUGHT other \(e)")
         }
