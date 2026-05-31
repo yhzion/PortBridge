@@ -55,6 +55,10 @@ jobs:
             | xargs -0 -I{} codesign --force --deep --sign - "{}"
           codesign --force --deep --sign - "$PRODUCTS/PortBridge.app"
 
+      # -parallel-testing-enabled NO: xcodebuild defaults to parallel workers,
+      # each launching its own host-app copy; the runner's LaunchServices chokes
+      # on the Nth concurrent host launch (tests pass, then a *relaunch* fails
+      # with err 20). Force a single serial host launch — no mid-run relaunch.
       - name: Test without building (Swift parity)
         run: |
           set -euo pipefail
@@ -63,6 +67,8 @@ jobs:
             -scheme PortBridge \
             -destination 'platform=macOS' \
             -only-testing:PortBridgeTests \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled NO \
             -derivedDataPath build
 
   # Cross-platform bindgen proof on Linux: the dylib extension is .so here.
