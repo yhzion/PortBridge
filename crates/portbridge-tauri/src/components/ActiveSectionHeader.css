@@ -1,0 +1,30 @@
+/* ActiveSectionHeader — macOS `ActiveSectionHeader.swift` 미러.
+ * HStack(title · Spacer · button). 전부 tokens.css 소비(매직 넘버 금지). */
+
+.pb-active-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pb-space-2);
+}
+
+/* .font(.subheadline).fontWeight(.semibold).foregroundStyle(.tint) */
+.pb-active-section-header__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pb-accent);
+}
+
+/* .buttonStyle(.borderless).foregroundStyle(.secondary).font(.caption) */
+.pb-active-section-header__stop {
+  font-size: 11px;
+  color: var(--pb-text-secondary);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.pb-active-section-header__stop:hover {
+  color: var(--pb-text-primary);
+}

@@ -1,7 +1,10 @@
 import { useEffect } from "react";
 
-import { useAppStore } from "./store/appStore";
+import { serverDisplayName, useAppStore } from "./store/appStore";
 import type { ThemeMode } from "./lib/types";
+import { ServerList } from "./components/ServerList";
+import { ErrorToasts } from "./components/ErrorToasts";
+import { PortConflictModal } from "./components/PortConflictModal";
 import "./App.css";
 
 const THEME_LABELS: Record<ThemeMode, string> = {
@@ -12,33 +15,36 @@ const THEME_LABELS: Record<ThemeMode, string> = {
 const THEME_ORDER: ThemeMode[] = ["system", "light", "dark"];
 
 /**
- * 앱 셸(헤더/콘텐츠/푸터 + 에러 토스트 스택)의 골격.
- *
- * S2에서는 기반구조가 살아있음을 증명하는 최소 셸이다 — 마운트 시 백엔드 커맨드를 호출해
- * 스토어를 채우고, 테마 토글로 ThemeProvider 경로를 검증한다. 실제 화면(ServerList/Section/
- * ForwardingRow/AddServer/PortConflict)은 S3가 `pb-shell__content` 자리를 채운다.
+ * 앱 셸 — macOS `ContentView` 등가. 헤더(타이틀 + 테마 토글) + 서버 리스트 +
+ * 에러 토스트 스택 + 포트충돌 모달. 마운트 시 저장 데이터 로드 후 전체 스캔/포워딩 동기화.
  */
 function App() {
-  const version = useAppStore((s) => s.version);
-  const servers = useAppStore((s) => s.servers);
-  const forwardings = useAppStore((s) => s.forwardings);
   const errors = useAppStore((s) => s.errors);
   const themeMode = useAppStore((s) => s.themeMode);
+  const pendingPortConflict = useAppStore((s) => s.pendingPortConflict);
+  const conflictServerName = useAppStore((s) =>
+    s.pendingPortConflict
+      ? serverDisplayName(s, s.pendingPortConflict.serverId)
+      : undefined,
+  );
+
   const dismissError = useAppStore((s) => s.dismissError);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
-  const loadVersion = useAppStore((s) => s.loadVersion);
+  const resolveConflict = useAppStore((s) => s.resolveConflict);
+  const setPendingPortConflict = useAppStore((s) => s.setPendingPortConflict);
   const loadServers = useAppStore((s) => s.loadServers);
   const loadFavorites = useAppStore((s) => s.loadFavorites);
   const loadPrefs = useAppStore((s) => s.loadPrefs);
+  const scanAll = useAppStore((s) => s.scanAll);
   const refreshForwardings = useAppStore((s) => s.refreshForwardings);
 
   useEffect(() => {
-    void loadVersion();
-    void loadServers();
-    void loadFavorites();
-    void loadPrefs();
-    void refreshForwardings();
-  }, [loadVersion, loadServers, loadFavorites, loadPrefs, refreshForwardings]);
+    void (async () => {
+      await Promise.all([loadServers(), loadFavorites(), loadPrefs()]);
+      // 서버 로드 후에야 스캔 대상이 존재한다.
+      await Promise.all([scanAll(), refreshForwardings()]);
+    })();
+  }, [loadServers, loadFavorites, loadPrefs, scanAll, refreshForwardings]);
 
   const cycleTheme = () => {
     const idx = THEME_ORDER.indexOf(themeMode);
@@ -54,46 +60,18 @@ function App() {
         </button>
       </header>
 
-      {errors.length > 0 && (
-        <div className="pb-toasts">
-          {errors.map((t) => (
-            <div key={t.id} className="pb-toast" role="alert">
-              <span>{t.message}</span>
-              <button
-                className="pb-toast__dismiss"
-                onClick={() => dismissError(t.id)}
-                type="button"
-                aria-label="에러 닫기"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
+      <ServerList />
+
+      <ErrorToasts errors={errors} onDismiss={dismissError} />
+
+      {pendingPortConflict && (
+        <PortConflictModal
+          conflict={pendingPortConflict}
+          serverDisplayName={conflictServerName}
+          onConfirm={(newPort) => void resolveConflict(newPort)}
+          onClose={() => setPendingPortConflict(null)}
+        />
       )}
-
-      <main className="pb-shell__content">
-        <p className="pb-placeholder">
-          기반구조(디자인 토큰·테마·상태 스토어·invoke 래퍼) 준비 완료. 화면은
-          S3에서 구현됩니다.
-        </p>
-        <dl className="pb-stats">
-          <div>
-            <dt>core</dt>
-            <dd>v{version || "…"}</dd>
-          </div>
-          <div>
-            <dt>서버</dt>
-            <dd>{servers.length}</dd>
-          </div>
-          <div>
-            <dt>활성 터널</dt>
-            <dd>{forwardings.length}</dd>
-          </div>
-        </dl>
-      </main>
-
-      <footer className="pb-shell__footer">PortBridge · Tauri</footer>
     </div>
   );
 }

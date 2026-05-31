@@ -1,0 +1,204 @@
+/* ForwardingRow — macOS `ForwardingRowView` 포팅.
+ *
+ * 간격 매핑 원칙: Swift가 `PBLayout.*`를 쓴 곳은 토큰, 원시 리터럴(HStack spacing 10,
+ * frame 18, minWidth 48, VStack spacing 1)은 그대로 리터럴로 둔다 — 토큰 스케일(4/8/12/16…)에
+ * 등가가 없는 픽셀 충실 값이라 억지로 토큰에 맞추지 않는다. */
+
+.pb-forwarding-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: var(--pb-space-1);
+  padding-bottom: var(--pb-space-1);
+}
+
+/* ── 즐겨찾기 별 버튼 ── */
+.pb-forwarding-row__favorite {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--pb-text-secondary);
+}
+
+.pb-forwarding-row__star {
+  width: 16px;
+  height: 16px;
+}
+
+.pb-forwarding-row__star--on {
+  fill: var(--pb-accent);
+  color: var(--pb-accent);
+}
+
+/* ── 토글 버튼(상태/포트/텍스트 본체) ── */
+.pb-forwarding-row__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.pb-forwarding-row__toggle:disabled {
+  cursor: default;
+}
+
+.pb-forwarding-row__status {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pb-forwarding-row__dot {
+  width: 16px;
+  height: 16px;
+}
+
+.pb-forwarding-row__dot--active {
+  color: var(--pb-color-green);
+}
+
+.pb-forwarding-row__dot--error {
+  color: var(--pb-color-red);
+}
+
+.pb-forwarding-row__dot--idle {
+  color: var(--pb-text-secondary);
+}
+
+/* 진행 스피너(ProgressView .small 근사) */
+.pb-forwarding-row__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--pb-separator);
+  border-top-color: var(--pb-text-secondary);
+  animation: pb-forwarding-row-spin 0.7s linear infinite;
+}
+
+@keyframes pb-forwarding-row-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 포트 번호 컬럼(monospaced bold, 우측 정렬) */
+.pb-forwarding-row__port {
+  flex: 0 0 auto;
+  min-width: 48px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--pb-text-primary);
+}
+
+.pb-forwarding-row__port--active {
+  color: var(--pb-color-green);
+}
+
+.pb-forwarding-row__port--error {
+  color: var(--pb-color-red);
+}
+
+/* 우측 텍스트(주/부) 스택 */
+.pb-forwarding-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pb-forwarding-row__primary {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pb-forwarding-row__primary--secondary {
+  color: var(--pb-text-secondary);
+}
+
+.pb-forwarding-row__primary--active {
+  color: var(--pb-color-green);
+}
+
+.pb-forwarding-row__primary--error {
+  color: var(--pb-color-red);
+}
+
+.pb-forwarding-row__secondary {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--pb-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pb-forwarding-row__spacer {
+  flex: 1 1 4px;
+  min-width: 4px;
+}
+
+/* ── 브라우저에서 열기 (accent pill) ── */
+.pb-forwarding-row__open {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pb-space-1);
+  padding: var(--pb-space-1) var(--pb-space-2);
+  border-radius: var(--pb-radius-sm);
+  background: var(--pb-accent-bg-idle);
+  box-shadow: inset 0 0 0 1px var(--pb-accent-stroke-subtle);
+  color: var(--pb-accent);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.08s ease-out,
+    box-shadow 0.08s ease-out;
+}
+
+.pb-forwarding-row__open:hover {
+  background: var(--pb-accent-bg-hover);
+  box-shadow: inset 0 0 0 1px var(--pb-accent-stroke-hover);
+}
+
+.pb-forwarding-row__open:active {
+  background: var(--pb-accent-bg-pressed);
+}
+
+.pb-forwarding-row__open-icon {
+  flex: 0 0 auto;
+}
+
+.pb-forwarding-row__open-label {
+  font-size: 0.75rem;
+}
+
+/* ── 에러 정보 아이콘 (info.circle, 호버 시 사유 툴팁) ── */
+.pb-forwarding-row__info {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pb-text-secondary);
+}

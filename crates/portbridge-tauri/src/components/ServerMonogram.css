@@ -1,0 +1,61 @@
+.pb-monogram {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.pb-monogram__tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--pb-radius-sm);
+  font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pb-monogram__dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--pb-bg-canvas);
+}
+
+.pb-monogram__dot--online {
+  background: var(--pb-color-green);
+}
+
+.pb-monogram__dot--warning {
+  background: var(--pb-color-orange);
+}
+
+.pb-monogram__dot--offline {
+  background: var(--pb-text-secondary);
+  opacity: 0.5;
+}
+
+.pb-monogram__dot--offline.pb-monogram__dot--pulse {
+  opacity: 1;
+}
+
+.pb-monogram__dot--pulse {
+  animation: pb-monogram-pulse 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes pb-monogram-pulse {
+  from {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

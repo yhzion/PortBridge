@@ -43,7 +43,7 @@ function toMessage(e: unknown): string {
   return String(e);
 }
 
-export interface AppState {
+interface AppState {
   // ── 데이터 슬라이스 (백엔드 경유) ──
   version: string;
   servers: Server[];
