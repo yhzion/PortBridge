@@ -2,6 +2,13 @@ use portbridge_core::model::{PortBridgeError, RemotePort, Server};
 use portbridge_core::platform::Platform;
 use portbridge_core::scan::{scan, CommandError, CommandResult, CommandRunner, DEFAULT_PORT_RANGE};
 use portbridge_core::ssh_config::{resolve_host as core_resolve_host, ResolvedHost};
+use portbridge_core::update::{
+    check_update as core_check_update, ReleaseFetcher, UpdateError, UpdateStatus,
+};
+use portbridge_core::version::{
+    parse_semver as core_parse_semver, update_available as core_update_available, ReleaseInfo,
+    SemanticVersion,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -208,6 +215,158 @@ pub fn resolve_host(
     Ok(resolved.map(ResolvedHostDto::from))
 }
 
+// ── version (trivial — callback 불필요, #85 패턴) ─────────────────────────────
+
+#[derive(uniffi::Record)]
+pub struct SemanticVersionDto {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+}
+impl From<SemanticVersion> for SemanticVersionDto {
+    fn from(v: SemanticVersion) -> Self {
+        SemanticVersionDto {
+            major: v.major,
+            minor: v.minor,
+            patch: v.patch,
+        }
+    }
+}
+impl From<SemanticVersionDto> for SemanticVersion {
+    fn from(v: SemanticVersionDto) -> Self {
+        SemanticVersion::new(v.major, v.minor, v.patch)
+    }
+}
+
+#[derive(uniffi::Record)]
+pub struct ReleaseInfoDto {
+    pub tag_name: String,
+    pub name: Option<String>,
+    pub html_url: String,
+    pub published_at: Option<String>,
+    pub body: Option<String>,
+}
+// ReleaseInfoDto는 경계로 들어오는 방향(Dto→core)만 필요하다(parse 결과/Available는
+// SemanticVersionDto로 전달되므로 core→Dto 변환은 어디에서도 쓰이지 않음).
+impl From<ReleaseInfoDto> for ReleaseInfo {
+    fn from(r: ReleaseInfoDto) -> Self {
+        ReleaseInfo {
+            tag_name: r.tag_name,
+            name: r.name,
+            html_url: r.html_url,
+            published_at: r.published_at,
+            body: r.body,
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn parse_semver(input: String) -> Option<SemanticVersionDto> {
+    core_parse_semver(&input).map(SemanticVersionDto::from)
+}
+
+#[uniffi::export]
+pub fn update_available(current: SemanticVersionDto, latest: ReleaseInfoDto) -> bool {
+    core_update_available(&current.into(), &latest.into())
+}
+
+// ── update (callback — ReleaseFetcher, #58 with_foreign 패턴) ─────────────────
+
+/// FFI 경계의 업데이트 조회 실패 원인. core `UpdateError`(별도 enum, PortBridgeError와
+/// 무관)를 미러한다. tuple variant인 core를 struct variant로 노출(uniffi 관례 — 기존
+/// CommandErrorDto와 동형).
+#[derive(Debug, uniffi::Error)]
+pub enum UpdateFfiError {
+    Network { reason: String },
+    HttpStatus { code: u16 },
+    Decoding { reason: String },
+    InvalidResponse,
+}
+impl std::fmt::Display for UpdateFfiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UpdateFfiError::Network { reason } => write!(f, "network error: {reason}"),
+            UpdateFfiError::HttpStatus { code } => write!(f, "HTTP {code}"),
+            UpdateFfiError::Decoding { reason } => write!(f, "decoding error: {reason}"),
+            UpdateFfiError::InvalidResponse => write!(f, "invalid response"),
+        }
+    }
+}
+impl std::error::Error for UpdateFfiError {}
+impl From<UpdateError> for UpdateFfiError {
+    fn from(e: UpdateError) -> Self {
+        match e {
+            UpdateError::Network(reason) => UpdateFfiError::Network { reason },
+            UpdateError::HttpStatus(code) => UpdateFfiError::HttpStatus { code },
+            UpdateError::Decoding(reason) => UpdateFfiError::Decoding { reason },
+            UpdateError::InvalidResponse => UpdateFfiError::InvalidResponse,
+        }
+    }
+}
+// 어댑터가 foreign Result(UpdateFfiError)를 core Result(UpdateError)로 되돌리는 데 필요.
+impl From<UpdateFfiError> for UpdateError {
+    fn from(e: UpdateFfiError) -> Self {
+        match e {
+            UpdateFfiError::Network { reason } => UpdateError::Network(reason),
+            UpdateFfiError::HttpStatus { code } => UpdateError::HttpStatus(code),
+            UpdateFfiError::Decoding { reason } => UpdateError::Decoding(reason),
+            UpdateFfiError::InvalidResponse => UpdateError::InvalidResponse,
+        }
+    }
+}
+// foreign trait의 Result는 콜백 프로토콜 실패를 흡수할 변환이 필수다. 정해진 매핑이
+// 없으므로 문자열을 싣는 Network로 흡수한다(기존 CommandErrorDto와 동일한 catch-all 관례).
+impl From<uniffi::UnexpectedUniFFICallbackError> for UpdateFfiError {
+    fn from(e: uniffi::UnexpectedUniFFICallbackError) -> Self {
+        UpdateFfiError::Network { reason: e.reason }
+    }
+}
+
+/// 업데이트 체크 결과(성공 경로). core `UpdateStatus`의 실패 variant(`Error`)는
+/// check_update의 `Err` 가지로 옮겨가므로 DTO는 UpToDate/Available 둘만 미러한다.
+#[derive(uniffi::Enum)]
+pub enum UpdateStatusDto {
+    UpToDate,
+    Available {
+        version: SemanticVersionDto,
+        url: String,
+    },
+}
+
+/// Foreign-implemented 릴리스 조회기. Swift가 구체 fetcher를 주입해 HTTP 조회가 FFI
+/// 경계를 넘게 한다(scan의 FfiCommandRunner와 같은 입장).
+#[uniffi::export(with_foreign)]
+pub trait FfiReleaseFetcher: Send + Sync {
+    fn fetch_latest(&self) -> Result<ReleaseInfoDto, UpdateFfiError>;
+}
+
+// 어댑터: foreign sync trait(by-value 반환) → core sync ReleaseFetcher.
+struct FetcherAdapter(Arc<dyn FfiReleaseFetcher>);
+impl ReleaseFetcher for FetcherAdapter {
+    fn fetch_latest(&self) -> Result<ReleaseInfo, UpdateError> {
+        match self.0.fetch_latest() {
+            Ok(dto) => Ok(dto.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_update(
+    fetcher: Arc<dyn FfiReleaseFetcher>,
+    current: SemanticVersionDto,
+) -> Result<UpdateStatusDto, UpdateFfiError> {
+    // core 시그니처는 (current, fetcher) 순서다.
+    match core_check_update(&current.into(), &FetcherAdapter(fetcher)) {
+        UpdateStatus::UpToDate => Ok(UpdateStatusDto::UpToDate),
+        UpdateStatus::Available { version, url } => Ok(UpdateStatusDto::Available {
+            version: version.into(),
+            url,
+        }),
+        UpdateStatus::Error(e) => Err(e.into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,5 +544,144 @@ mod tests {
             Ok(_) => panic!("expected SshConfigNotFound, got Ok"),
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── version: parse_semver export ──────────────────────────────────────────
+
+    #[test]
+    fn parse_semver_valid_returns_some_components() {
+        let v = parse_semver("1.2.3".to_string()).expect("expected Some");
+        assert_eq!((v.major, v.minor, v.patch), (1, 2, 3));
+    }
+
+    #[test]
+    fn parse_semver_strips_leading_v() {
+        let v = parse_semver("v2.0.1".to_string()).expect("expected Some");
+        assert_eq!((v.major, v.minor, v.patch), (2, 0, 1));
+    }
+
+    #[test]
+    fn parse_semver_invalid_returns_none() {
+        assert!(parse_semver("1.2.3-alpha".to_string()).is_none());
+        assert!(parse_semver("nightly".to_string()).is_none());
+    }
+
+    // ── version: update_available export ──────────────────────────────────────
+
+    fn release_dto(tag: &str) -> ReleaseInfoDto {
+        ReleaseInfoDto {
+            tag_name: tag.to_string(),
+            name: None,
+            html_url: "https://example/r".to_string(),
+            published_at: None,
+            body: None,
+        }
+    }
+
+    fn version_dto(major: u32, minor: u32, patch: u32) -> SemanticVersionDto {
+        SemanticVersionDto {
+            major,
+            minor,
+            patch,
+        }
+    }
+
+    #[test]
+    fn update_available_true_when_release_is_newer() {
+        assert!(update_available(
+            version_dto(1, 2, 0),
+            release_dto("v1.3.0")
+        ));
+    }
+
+    #[test]
+    fn update_available_false_when_not_newer_or_unparseable() {
+        assert!(!update_available(
+            version_dto(1, 3, 0),
+            release_dto("1.3.0")
+        ));
+        assert!(!update_available(
+            version_dto(1, 0, 0),
+            release_dto("nightly")
+        ));
+    }
+
+    // ── update: From<UpdateError> 각 variant 보존 (4 variant) ──────────────────
+
+    #[test]
+    fn from_update_error_preserves_all_variants() {
+        match UpdateFfiError::from(UpdateError::Network("offline".to_string())) {
+            UpdateFfiError::Network { reason } => assert_eq!(reason, "offline"),
+            other => panic!("expected Network, got {other:?}"),
+        }
+        match UpdateFfiError::from(UpdateError::HttpStatus(503)) {
+            UpdateFfiError::HttpStatus { code } => assert_eq!(code, 503),
+            other => panic!("expected HttpStatus, got {other:?}"),
+        }
+        match UpdateFfiError::from(UpdateError::Decoding("bad json".to_string())) {
+            UpdateFfiError::Decoding { reason } => assert_eq!(reason, "bad json"),
+            other => panic!("expected Decoding, got {other:?}"),
+        }
+        assert!(matches!(
+            UpdateFfiError::from(UpdateError::InvalidResponse),
+            UpdateFfiError::InvalidResponse
+        ));
+    }
+
+    // ── seam: check_update export를 mock FfiReleaseFetcher 주입으로 구동 ───────
+
+    /// canned ReleaseInfoDto/UpdateFfiError를 그대로 돌려주는 테스트용 fetcher.
+    struct CannedFetcher(Result<ReleaseInfoDto, UpdateFfiError>);
+    impl FfiReleaseFetcher for CannedFetcher {
+        fn fetch_latest(&self) -> Result<ReleaseInfoDto, UpdateFfiError> {
+            match &self.0 {
+                Ok(r) => Ok(release_dto(&r.tag_name)),
+                Err(UpdateFfiError::Network { reason }) => Err(UpdateFfiError::Network {
+                    reason: reason.clone(),
+                }),
+                Err(UpdateFfiError::HttpStatus { code }) => {
+                    Err(UpdateFfiError::HttpStatus { code: *code })
+                }
+                Err(UpdateFfiError::Decoding { reason }) => Err(UpdateFfiError::Decoding {
+                    reason: reason.clone(),
+                }),
+                Err(UpdateFfiError::InvalidResponse) => Err(UpdateFfiError::InvalidResponse),
+            }
+        }
+    }
+
+    #[test]
+    fn check_update_available_when_release_is_newer() {
+        let fetcher: Arc<dyn FfiReleaseFetcher> =
+            Arc::new(CannedFetcher(Ok(release_dto("v1.3.0"))));
+        match check_update(fetcher, version_dto(1, 2, 0)).expect("expected Ok") {
+            UpdateStatusDto::Available { version, url } => {
+                assert_eq!((version.major, version.minor, version.patch), (1, 3, 0));
+                assert_eq!(url, "https://example/r");
+            }
+            UpdateStatusDto::UpToDate => panic!("expected Available, got UpToDate"),
+        }
+    }
+
+    #[test]
+    fn check_update_up_to_date_when_not_newer() {
+        let fetcher: Arc<dyn FfiReleaseFetcher> = Arc::new(CannedFetcher(Ok(release_dto("1.3.0"))));
+        match check_update(fetcher, version_dto(1, 3, 0)).expect("expected Ok") {
+            UpdateStatusDto::UpToDate => {}
+            UpdateStatusDto::Available { .. } => panic!("expected UpToDate, got Available"),
+        }
+    }
+
+    #[test]
+    fn check_update_error_round_trips_via_err_arm() {
+        // fetch 실패 → core UpdateStatus::Error → check_update Err(UpdateFfiError).
+        // UpdateFfiError→UpdateError(어댑터)→UpdateStatus::Error→UpdateFfiError 라운드트립.
+        let fetcher: Arc<dyn FfiReleaseFetcher> =
+            Arc::new(CannedFetcher(Err(UpdateFfiError::HttpStatus { code: 503 })));
+        match check_update(fetcher, version_dto(1, 0, 0)) {
+            Err(UpdateFfiError::HttpStatus { code }) => assert_eq!(code, 503),
+            Err(other) => panic!("expected HttpStatus, got {other:?}"),
+            Ok(_) => panic!("expected Err, got Ok"),
+        }
     }
 }
