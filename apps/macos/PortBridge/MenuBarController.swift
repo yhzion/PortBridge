@@ -5,9 +5,9 @@ import SwiftUI
 /// 메뉴바 아이콘 + 클릭 분기 관리자.
 ///
 /// - 좌클릭: 표준 NSMenu 표시 (즐겨찾기 / Active / Errors / 환경설정 / Quit)
-/// - 우클릭: 즐겨찾기 일괄 토글 (Amphetamine 패턴)
+/// - 우클릭: 빠른 일괄 토글 (Amphetamine 패턴) — 연결 중이면 전부 해제, 모두 꺼졌으면 즐겨찾기만 연결
 ///
-/// 아이콘은 isAnyFavoriteActive 파생 상태가 바뀔 때마다 자동 갱신됩니다.
+/// 아이콘은 isAnyForwardingActive 파생 상태가 바뀔 때마다 자동 갱신됩니다.
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let viewModel: AppViewModel
@@ -25,7 +25,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem = item
 
         if let button = item.button {
-            button.image = MenuBarIconRenderer.image(active: viewModel.isAnyFavoriteActive)
+            button.image = MenuBarIconRenderer.image(active: viewModel.isAnyForwardingActive)
             button.target = self
             button.action = #selector(handleClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -41,7 +41,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let type = NSApp.currentEvent?.type
         switch type {
         case .rightMouseUp:
-            Task { await viewModel.toggleAllFavorites() }
+            Task { await viewModel.toggleAll() }
         case .leftMouseUp:
             presentMenu()
         default:
@@ -269,7 +269,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Observation 프레임워크는 한 번 발화하면 종료되므로 onChange 안에서 재구독합니다.
     private func observeIconState() {
         withObservationTracking { [weak self] in
-            _ = self?.viewModel.isAnyFavoriteActive
+            _ = self?.viewModel.isAnyForwardingActive
             _ = self?.viewModel.updates.availableUpdate
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -282,7 +282,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func refreshIcon() {
-        let active = viewModel.isAnyFavoriteActive
+        let active = viewModel.isAnyForwardingActive
         statusItem?.button?.image = MenuBarIconRenderer.image(active: active)
     }
 

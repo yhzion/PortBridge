@@ -27,16 +27,26 @@ nonisolated struct PortScanner {
         nonisolated(unsafe) let runner = runner
         nonisolated(unsafe) let serverDto = dto
 
-        return try await Task.detached {
-            do {
-                let result = try scanPorts(runner: runner, server: serverDto)
-                return result.map {
-                    RemotePort(port: Int($0.port), address: $0.address, processName: $0.processName)
+        // 생성 바인딩 `scanPorts`는 default MainActor 격리(SWIFT_DEFAULT_ACTOR_ISOLATION)를
+        // 받아 @MainActor다. async 컨텍스트(예: Task.detached)에서 호출하면 런타임이
+        // 메인 액터로 hop해 블로킹 SSH가 메인 스레드를 얼린다(무지개 커서). 동기 GCD
+        // 클로저에서 호출하면 Swift 5 모드에서 격리 위반이 warning일 뿐 hop이 생기지
+        // 않아 실제 백그라운드 스레드에서 돈다. 근본 해결은 생성 바인딩을 default-isolation
+        // 미적용 모듈로 분리하는 것(그때까지 Task.detached로 되돌리지 말 것).
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let result = try scanPorts(runner: runner, server: serverDto)
+                    continuation.resume(returning: result.map {
+                        RemotePort(port: Int($0.port), address: $0.address, processName: $0.processName)
+                    })
+                } catch let error as PortBridgeFfiError {
+                    continuation.resume(throwing: Self.map(error))
+                } catch {
+                    continuation.resume(throwing: error)
                 }
-            } catch let error as PortBridgeFfiError {
-                throw Self.map(error)
             }
-        }.value
+        }
     }
 
     private static func map(_ error: PortBridgeFfiError) -> PortBridgeError {

@@ -255,43 +255,53 @@ final class AppViewModel {
 
     // MARK: - Menu bar (right-click toggle)
 
-    /// 메뉴바 아이콘이 "ON" 상태로 보일지 결정하는 파생 상태.
-    /// 즐겨찾기 중 하나라도 active 또는 starting 이면 true.
-    var isAnyFavoriteActive: Bool {
-        favoriteRows.contains { row in
-            switch row.state {
+    /// 메뉴바 아이콘 ON 판정 + 우클릭 일괄토글의 방향 결정에 쓰는 파생 상태.
+    /// 즐겨찾기 여부와 무관하게 active/starting 포워딩이 하나라도 있으면 true.
+    var isAnyForwardingActive: Bool {
+        forwardings.contains { fw in
+            switch fw.state {
             case .active, .starting: return true
             case .idle, .error: return false
             }
         }
     }
 
-    /// 메뉴바 우클릭 핸들러 — 모든 즐겨찾기를 일괄 토글 (Amphetamine 패턴).
+    /// 메뉴바 우클릭 핸들러 — 빠른 일괄 토글 (Amphetamine 패턴).
     ///
-    /// 규칙:
-    /// - 하나라도 ON (isAnyFavoriteActive == true)  → 전부 OFF
-    /// - 모두 OFF                                    → 전부 ON
+    /// 규칙 (비대칭):
+    /// - 하나라도 연결 중 (isAnyForwardingActive == true) → 즐겨찾기 여부와 무관하게 전부 OFF
+    /// - 모두 OFF                                          → 즐겨찾기만 ON
     ///
     /// 단일 forwarding 토글은 `toggleForwarding(serverId:for:)`를 사용하면 됩니다.
     /// 그 함수가 idempotent하지 않다는 점에 주의 — 같은 상태로 호출하면 반대로 뒤집습니다.
-    /// 따라서 "전부 ON" 작업에서는 이미 active인 항목을 건드리면 오히려 끄게 됩니다.
-    func toggleAllFavorites() async {
-        let shouldTurnOff = isAnyFavoriteActive
-        let targets = favoriteRows.filter { row in
-            let isActive = switch row.state {
-            case .active, .starting: true
-            case .idle, .error: false
+    /// 따라서 방향별로 대상을 미리 걸러 의도한 방향으로만 뒤집습니다.
+    func toggleAll() async {
+        let targets: [(serverId: UUID, port: RemotePort)] = if isAnyForwardingActive {
+            // OFF: 즐겨찾기 여부와 무관하게 active/starting 포워딩 전부 해제.
+            forwardings.compactMap { fw in
+                switch fw.state {
+                case .active, .starting:
+                    return (serverId: fw.serverId, port: RemotePort(port: fw.remotePort, address: "0.0.0.0", processName: nil))
+                case .idle, .error:
+                    return nil
+                }
             }
-            return isActive == shouldTurnOff
+        } else {
+            // ON: 즐겨찾기만 연결 시도 (아직 연결 안 된 즐겨찾기).
+            favoriteRows.compactMap { row in
+                switch row.state {
+                case .idle, .error:
+                    let port = RemotePort(port: row.remotePort, address: "0.0.0.0", processName: row.processName)
+                    return (serverId: row.id.serverId, port: port)
+                case .active, .starting:
+                    return nil
+                }
+            }
         }
         await withTaskGroup(of: Void.self) { group in
-            for row in targets {
-                let port = RemotePort(
-                    port: row.remotePort,
-                    address: "0.0.0.0",
-                    processName: row.processName
-                )
-                let serverId = row.id.serverId
+            for target in targets {
+                let serverId = target.serverId
+                let port = target.port
                 group.addTask { @MainActor in
                     await self.toggleForwarding(serverId: serverId, for: port)
                 }

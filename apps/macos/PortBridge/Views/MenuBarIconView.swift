@@ -33,7 +33,7 @@ struct MenuBarIconView: View {
             ctx.stroke(base, with: color, style: stroke)
 
             if active {
-                let radius: CGFloat = 2.2 * scale
+                let radius: CGFloat = 3.4 * scale
                 let dot = Path(ellipseIn: CGRect(
                     x: 12 * scale - radius,
                     y: 12.5 * scale - radius,
