@@ -1,0 +1,130 @@
+/* AddServerModal — apps/macos AddServerSheet.swift 포팅.
+ * 디자인 값은 전부 tokens.css 변수만 소비(매직 넘버 금지). */
+
+.pb-add-server__overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pb-space-4);
+  background: rgba(0, 0, 0, 0.3);
+  animation: pb-add-server-fade 0.12s ease-out;
+}
+
+@keyframes pb-add-server-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* SwiftUI .frame(width: 380) 등가. */
+.pb-add-server__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-4);
+  width: 380px;
+  max-width: 100%;
+  padding: var(--pb-space-4);
+  background: var(--pb-bg-surface);
+  border: 1px solid var(--pb-separator);
+  border-radius: var(--pb-radius-xl);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* .font(.headline) 등가. */
+.pb-add-server__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--pb-text-primary);
+}
+
+/* .formStyle(.grouped) 근사 — 그룹 표면 카드. */
+.pb-add-server__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-3);
+  padding: var(--pb-space-3) var(--pb-space-4);
+  background: var(--pb-bg-surface-secondary);
+  border: 1px solid var(--pb-separator);
+  border-radius: var(--pb-radius-lg);
+}
+
+.pb-add-server__field {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-3);
+}
+
+.pb-add-server__label {
+  flex: 0 0 auto;
+  width: 64px;
+  color: var(--pb-text-secondary);
+}
+
+.pb-add-server__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--pb-text-primary);
+  background: var(--pb-bg-surface);
+  border: 1px solid var(--pb-input-border);
+  border-radius: var(--pb-radius-sm);
+  padding: var(--pb-space-1) var(--pb-space-2);
+}
+
+.pb-add-server__input::placeholder {
+  color: var(--pb-text-placeholder);
+}
+
+.pb-add-server__input:focus {
+  outline: none;
+  border-color: var(--pb-input-border-focused);
+}
+
+/* .font(.caption).foregroundStyle(.red) 등가. */
+.pb-add-server__error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--pb-color-red);
+}
+
+.pb-add-server__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--pb-space-2);
+}
+
+.pb-add-server__button {
+  font: inherit;
+  color: var(--pb-text-primary);
+  background: var(--pb-bg-surface);
+  border: 1px solid var(--pb-separator);
+  border-radius: var(--pb-radius-sm);
+  padding: var(--pb-space-1) var(--pb-space-4);
+  cursor: pointer;
+}
+
+.pb-add-server__button:hover {
+  background: var(--pb-bg-surface-secondary);
+}
+
+.pb-add-server__button--primary {
+  color: #ffffff;
+  background: var(--pb-accent);
+  border-color: transparent;
+}
+
+.pb-add-server__button--primary:hover {
+  background: var(--pb-accent);
+  filter: brightness(1.08);
+}
+
+.pb-add-server__button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

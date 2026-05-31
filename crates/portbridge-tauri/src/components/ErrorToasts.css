@@ -1,0 +1,63 @@
+/* ErrorToasts — macOS ContentView.errorStack/errorToast 미러.
+ * 스택은 .padding(.horizontal) + .padding(.bottom, s1), 토스트 간 spacing s1.
+ * 토스트는 빨강 0.08 배경 / 0.25 stroke / radius sm. 아래에서 슬라이드+페이드 인. */
+
+.pb-error-toasts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-1);
+  padding: 0 var(--pb-space-4) var(--pb-space-1);
+}
+
+.pb-error-toasts__toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--pb-radius-sm);
+  background: rgba(255, 59, 48, 0.08);
+  border: 1px solid rgba(255, 59, 48, 0.25);
+  animation: pb-error-toasts-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pb-error-toasts__icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--pb-color-red);
+}
+
+.pb-error-toasts__message {
+  flex: 1 1 auto;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: left;
+  color: var(--pb-color-red);
+}
+
+.pb-error-toasts__dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--pb-text-secondary);
+}
+
+.pb-error-toasts__dismiss:hover {
+  color: var(--pb-text-primary);
+}
+
+@keyframes pb-error-toasts-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

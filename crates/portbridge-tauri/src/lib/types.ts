@@ -71,8 +71,39 @@ export interface ErrorToast {
 export interface PortConflict {
   serverId: string;
   remotePort: number;
-  suggestedLocalPort: number;
+  /** 충돌난(이미 사용 중인) 로컬 포트. 사용자는 이와 다른 포트를 입력해야 한다. */
+  attemptedLocal: number;
 }
 
 /** 테마 모드 (시스템/라이트/다크). */
 export type ThemeMode = "system" | "light" | "dark";
+
+/**
+ * 섹션 스캔 상태 (macOS `ServerSectionViewModel.scanState` 등가).
+ *
+ * core `PortBridgeError`는 이미 분류돼 있으나 #106 Tauri 커맨드가 경계에서 `to_string()`으로
+ * 평탄화한다. 구조화 에러 노출(백엔드 보강)이 들어오기 전까지 store는 `loaded`/`error`만 채우고,
+ * `offline`/`toolMissing`/`authFailed`는 백엔드 구조화 후 채운다(뷰는 전체 상태를 미리 지원).
+ * 라이브 터널 사망 이벤트는 별도 이벤트 인프라 필요 — 후속 트랙.
+ */
+export type ScanState =
+  | { kind: "idle" }
+  | { kind: "scanning" }
+  | { kind: "loaded" }
+  | { kind: "offline"; isRetrying: boolean }
+  | { kind: "toolMissing" }
+  | { kind: "authFailed"; copyCommand: string }
+  | { kind: "error"; message: string };
+
+/** macOS `ServerSectionViewModel` 등가 — 서버 + 스캔포트 + 펼침/스캔상태 결합(파생). */
+export interface ServerSection {
+  server: Server;
+  ports: RemotePort[];
+  isExpanded: boolean;
+  scanState: ScanState;
+}
+
+/** ForwardingDto.state 문자열이 활성 계열(Idle 아님)인지. */
+export function isActiveForwardingState(state: string): boolean {
+  return state !== "Idle";
+}

@@ -1,0 +1,116 @@
+/* PortConflictModal — apps/macos ContentView.swift PortConflictSheet 포팅.
+ * 디자인 값은 전부 tokens.css 변수만 소비(매직 넘버 금지). */
+
+.pb-port-conflict__overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pb-space-4);
+  background: rgba(0, 0, 0, 0.3);
+  animation: pb-port-conflict-fade 0.12s ease-out;
+}
+
+@keyframes pb-port-conflict-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* VStack(spacing: s3).padding().frame(width: 360) 등가. */
+.pb-port-conflict__card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--pb-space-3);
+  width: 360px;
+  max-width: 100%;
+  padding: var(--pb-space-4);
+  background: var(--pb-bg-surface);
+  border: 1px solid var(--pb-separator);
+  border-radius: var(--pb-radius-xl);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* .font(.headline) 등가. */
+.pb-port-conflict__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--pb-text-primary);
+}
+
+/* .font(.subheadline).foregroundStyle(.secondary) 등가. */
+.pb-port-conflict__prompt {
+  margin: 0;
+  font-size: 13px;
+  color: var(--pb-text-secondary);
+}
+
+/* .textFieldStyle(.roundedBorder) 등가. */
+.pb-port-conflict__input {
+  font: inherit;
+  color: var(--pb-text-primary);
+  background: var(--pb-bg-surface);
+  border: 1px solid var(--pb-input-border);
+  border-radius: var(--pb-radius-sm);
+  padding: var(--pb-space-1) var(--pb-space-2);
+}
+
+.pb-port-conflict__input::placeholder {
+  color: var(--pb-text-placeholder);
+}
+
+.pb-port-conflict__input:focus {
+  outline: none;
+  border-color: var(--pb-input-border-focused);
+}
+
+/* .font(.caption).foregroundStyle(.red) 등가. */
+.pb-port-conflict__error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--pb-color-red);
+}
+
+/* HStack { Spacer(); 취소; 연결 } 등가 — 우측 정렬. */
+.pb-port-conflict__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--pb-space-2);
+}
+
+.pb-port-conflict__button {
+  font: inherit;
+  color: var(--pb-text-primary);
+  background: var(--pb-bg-surface);
+  border: 1px solid var(--pb-separator);
+  border-radius: var(--pb-radius-sm);
+  padding: var(--pb-space-1) var(--pb-space-4);
+  cursor: pointer;
+}
+
+.pb-port-conflict__button:hover {
+  background: var(--pb-bg-surface-secondary);
+}
+
+/* .keyboardShortcut(.defaultAction) — 강조 버튼. */
+.pb-port-conflict__button--primary {
+  color: #ffffff;
+  background: var(--pb-accent);
+  border-color: transparent;
+}
+
+.pb-port-conflict__button--primary:hover {
+  background: var(--pb-accent);
+  filter: brightness(1.08);
+}
+
+.pb-port-conflict__button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
