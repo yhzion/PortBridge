@@ -70,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // executing tests after launching" — macOS parity CI flakiness). Mirrors the
         // launch-side-effect skips in init().
         if !Self.isRunningUnderTest {
-            Task { @MainActor in
+            Task(priority: .utility) { @MainActor in
                 await viewModel.updates.checkIfDue()
             }
         }
