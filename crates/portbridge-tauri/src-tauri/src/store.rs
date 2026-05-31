@@ -58,7 +58,7 @@ impl Persistence for FileStore {
 /// app-config dir 미해석 시(테스트/헤드리스) 폴백 디렉터리. `$HOME/.portbridge-tauri`,
 /// HOME조차 없으면 상대 경로. 프로덕션 경로는 commands에서 `AppHandle`로 주입한다.
 pub fn fallback_dir() -> PathBuf {
-    if let Some(home) = env::var_os("HOME") {
+    if let Some(home) = env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")) {
         return PathBuf::from(home).join(".portbridge-tauri");
     }
     PathBuf::from(".portbridge-tauri")
