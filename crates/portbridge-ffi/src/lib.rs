@@ -1,5 +1,8 @@
 use portbridge_core::model::{PortBridgeError, RemotePort, Server};
+use portbridge_core::platform::Platform;
 use portbridge_core::scan::{scan, CommandError, CommandResult, CommandRunner, DEFAULT_PORT_RANGE};
+use portbridge_core::ssh_config::{resolve_host as core_resolve_host, ResolvedHost};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +29,8 @@ pub enum PortBridgeFfiError {
     SshAuthFailed { host: String },
     ServerUnreachable { host: String, reason: String },
     RemoteToolsMissing,
+    SshConfigNotFound,
+    SshConfigUnreadable { reason: String },
 }
 impl std::fmt::Display for PortBridgeFfiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -35,6 +40,10 @@ impl std::fmt::Display for PortBridgeFfiError {
                 write!(f, "server unreachable: {host}: {reason}")
             }
             PortBridgeFfiError::RemoteToolsMissing => write!(f, "remote tools missing"),
+            PortBridgeFfiError::SshConfigNotFound => write!(f, "ssh config not found"),
+            PortBridgeFfiError::SshConfigUnreadable { reason } => {
+                write!(f, "ssh config unreadable: {reason}")
+            }
         }
     }
 }
@@ -47,14 +56,15 @@ impl From<PortBridgeError> for PortBridgeFfiError {
                 PortBridgeFfiError::ServerUnreachable { host, reason }
             }
             PortBridgeError::RemoteToolsMissing => PortBridgeFfiError::RemoteToolsMissing,
-            // scan_ports는 스캔 에러만 반환한다 — 터널(ForwardingDiedEarly)·ssh-config
-            // 해석(#51, cli/#52 소비) 에러는 이 FFI 경계에 도달하지 않는다. 정식 FFI
-            // 노출은 #58(ffi 바인딩) 소관. core 열거형 확장 시 동반 갱신(#65 결합).
-            PortBridgeError::ForwardingDiedEarly { .. } => {
-                unreachable!("scan_ports never emits ForwardingDiedEarly")
+            // ssh-config 해석 에러는 resolve_host가 방출한다(scan_ports는 미방출).
+            PortBridgeError::SshConfigNotFound => PortBridgeFfiError::SshConfigNotFound,
+            PortBridgeError::SshConfigUnreadable { reason } => {
+                PortBridgeFfiError::SshConfigUnreadable { reason }
             }
-            PortBridgeError::SshConfigNotFound | PortBridgeError::SshConfigUnreadable { .. } => {
-                unreachable!("scan_ports never emits ssh-config errors")
+            // ForwardingDiedEarly는 scan_ports·resolve_host 둘 다 방출하지 않는다(터널 전용).
+            // core 열거형 확장 시 동반 갱신(#65 결합).
+            PortBridgeError::ForwardingDiedEarly { .. } => {
+                unreachable!("scan_ports/resolve_host never emit ForwardingDiedEarly")
             }
         }
     }
@@ -154,6 +164,50 @@ pub fn scan_ports(
     Ok(ports.into_iter().map(RemotePortDto::from).collect())
 }
 
+#[derive(uniffi::Record)]
+pub struct ResolvedHostDto {
+    pub hostname: Option<String>,
+    pub user: Option<String>,
+    pub port: Option<u16>,
+    pub identity_file: Option<String>,
+}
+impl From<ResolvedHost> for ResolvedHostDto {
+    fn from(h: ResolvedHost) -> Self {
+        ResolvedHostDto {
+            hostname: h.hostname,
+            user: h.user,
+            port: h.port,
+            identity_file: h.identity_file,
+        }
+    }
+}
+
+// resolve_host는 Platform에서 config_dir 경로만 쓰고 파일 I/O는 core가 담당한다.
+// 따라서 호출자가 주입한 config_dir만 들고 kill_process는 도달 불가능한 플랫폼.
+struct FixedPlatform {
+    config_dir: PathBuf,
+}
+impl Platform for FixedPlatform {
+    fn config_dir(&self) -> Option<PathBuf> {
+        Some(self.config_dir.clone())
+    }
+    fn kill_process(&self, _pid: u32) -> std::io::Result<()> {
+        unreachable!("resolve_host never kills processes")
+    }
+}
+
+#[uniffi::export]
+pub fn resolve_host(
+    config_dir: String,
+    alias: String,
+) -> Result<Option<ResolvedHostDto>, PortBridgeFfiError> {
+    let platform = FixedPlatform {
+        config_dir: PathBuf::from(config_dir),
+    };
+    let resolved = core_resolve_host(&platform, &alias)?;
+    Ok(resolved.map(ResolvedHostDto::from))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,6 +244,25 @@ mod tests {
     fn from_remote_tools_missing_maps() {
         let ffi = PortBridgeFfiError::from(PortBridgeError::RemoteToolsMissing);
         assert!(matches!(ffi, PortBridgeFfiError::RemoteToolsMissing));
+    }
+
+    // --- From<PortBridgeError> ssh-config 보존 (resolve_host가 방출하는 2 variant) ---
+
+    #[test]
+    fn from_ssh_config_not_found_maps() {
+        let ffi = PortBridgeFfiError::from(PortBridgeError::SshConfigNotFound);
+        assert!(matches!(ffi, PortBridgeFfiError::SshConfigNotFound));
+    }
+
+    #[test]
+    fn from_ssh_config_unreadable_preserves_reason() {
+        let ffi = PortBridgeFfiError::from(PortBridgeError::SshConfigUnreadable {
+            reason: "x".to_string(),
+        });
+        match ffi {
+            PortBridgeFfiError::SshConfigUnreadable { reason } => assert_eq!(reason, "x"),
+            other => panic!("expected SshConfigUnreadable, got {other:?}"),
+        }
     }
 
     // --- seam: scan_ports export 경로를 FfiCommandRunner 주입으로 구동 ---
@@ -257,5 +330,60 @@ mod tests {
             Err(other) => panic!("expected SshAuthFailed, got {other:?}"),
             Ok(_) => panic!("expected Err, got Ok"),
         }
+    }
+
+    // --- seam: resolve_host export를 config_dir 주입으로 구동 (std만) ---
+
+    /// 고유한 임시 디렉터리를 만든다(테스트 격리 — pid + 고정 접미사).
+    fn resolve_temp_dir(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("pb_ffi_resolve_{}_{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    #[test]
+    fn resolve_host_returns_some_for_known_alias() {
+        let dir = resolve_temp_dir("known");
+        std::fs::write(
+            dir.join("config"),
+            "Host foo\n  HostName 1.2.3.4\n  Port 2222\n",
+        )
+        .unwrap();
+
+        let resolved = resolve_host(dir.to_str().unwrap().to_string(), "foo".to_string())
+            .expect("expected Ok")
+            .expect("expected Some");
+        assert_eq!(resolved.hostname.as_deref(), Some("1.2.3.4"));
+        assert_eq!(resolved.port, Some(2222));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_host_unknown_alias_is_none() {
+        let dir = resolve_temp_dir("unknown");
+        std::fs::write(
+            dir.join("config"),
+            "Host foo\n  HostName 1.2.3.4\n  Port 2222\n",
+        )
+        .unwrap();
+
+        let resolved = resolve_host(dir.to_str().unwrap().to_string(), "nope".to_string())
+            .expect("expected Ok");
+        assert!(resolved.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_host_missing_config_file_is_not_found() {
+        let dir = resolve_temp_dir("missing");
+        // config 파일 없는 빈 디렉터리 → SshConfigNotFound.
+        match resolve_host(dir.to_str().unwrap().to_string(), "foo".to_string()) {
+            Err(PortBridgeFfiError::SshConfigNotFound) => {}
+            Err(other) => panic!("expected SshConfigNotFound, got {other:?}"),
+            Ok(_) => panic!("expected SshConfigNotFound, got Ok"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

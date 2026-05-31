@@ -47,6 +47,11 @@ nonisolated struct PortScanner {
             return .serverUnreachable(host: host, reason: reason)
         case .RemoteToolsMissing:
             return .remoteToolsMissing
+        default:
+            // scan 경로는 scan 분류 3-variant만 방출한다. ssh-config(resolve_host)·
+            // version 등 다른 경로 전용 FFI 에러는 scan에 도달하지 않는다. default로
+            // 두어 FFI enum 확장(#85의 SshConfig* 등)에 robust하게 한다 — 도달 불가.
+            preconditionFailure("scan never emits non-scan FFI errors: \(error)")
         }
     }
 }
