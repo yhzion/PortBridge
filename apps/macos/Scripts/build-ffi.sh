@@ -10,7 +10,8 @@
 #   Generated/ffimod/module.modulemap     so `import portbridge_ffiFFI` resolves
 #
 # The staticlib (libportbridge_ffi.a) is produced by cargo at the repo-root
-# target/debug and linked via LIBRARY_SEARCH_PATHS + OTHER_LDFLAGS.
+# target/<profile> (debug or release, per $CONFIGURATION) and linked via the
+# matching per-configuration OTHER_LDFLAGS path in the Xcode project.
 #
 # These outputs are declared as outputPaths of this phase so XCBuild schedules
 # it before Compile Sources, which consumes Generated/portbridge_ffi.swift.
@@ -26,15 +27,27 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # `cargo metadata`, which must run with the CWD inside the workspace — Xcode
 # runs this script with CWD = $SRCROOT (apps/macos), outside the workspace.
 REPO_ROOT="$(cd "$SRCROOT/../.." && pwd)"
-TARGET_DIR="$REPO_ROOT/target/debug"
+
+# Map the Xcode build configuration to the cargo profile. Xcode sets
+# $CONFIGURATION (Debug/Release); cargo's target subdir is lowercase and Release
+# needs --release. Default to Debug for manual runs outside Xcode (where
+# $CONFIGURATION is unset — set -u would otherwise abort).
+if [ "${CONFIGURATION:-Debug}" = "Release" ]; then
+  CARGO_PROFILE_FLAG="--release"
+  PROFILE_DIR="release"
+else
+  CARGO_PROFILE_FLAG=""
+  PROFILE_DIR="debug"
+fi
+TARGET_DIR="$REPO_ROOT/target/$PROFILE_DIR"
 GEN_DIR="$SRCROOT/Generated"
 FFIMOD_DIR="$GEN_DIR/ffimod"
 
 mkdir -p "$FFIMOD_DIR"
 cd "$REPO_ROOT"
 
-# 1) Build the Rust crate (cdylib + staticlib). Host arch (arm64) only.
-cargo build -p portbridge-ffi
+# 1) Build the Rust crate (cdylib + staticlib) for the active profile. Host arch (arm64) only.
+cargo build -p portbridge-ffi $CARGO_PROFILE_FLAG
 
 # 2) Generate Swift bindings from the freshly built dylib via the embedded
 #    uniffi-bindgen bin (uniffi-bindgen is not on PATH).
