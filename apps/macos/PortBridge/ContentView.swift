@@ -52,15 +52,15 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("오류: \(toast.message)")
+                .accessibilityLabel(String(localized: "content.errorToast.a11yLabel", defaultValue: "오류: \(toast.message)"))
             Button {
                 vm.dismissError(toast.id)
             } label: {
                 Image(systemName: "xmark").imageScale(.small).foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
-            .help("에러 메시지 닫기")
-            .accessibilityLabel("에러 메시지 닫기")
+            .help(String(localized: "content.errorToast.dismiss", defaultValue: "에러 메시지 닫기"))
+            .accessibilityLabel(String(localized: "content.errorToast.dismiss", defaultValue: "에러 메시지 닫기"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -101,22 +101,25 @@ struct PortConflictSheet: View {
         let trimmed = localPortText.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return nil }
         guard let port = Int(trimmed), (1 ... 65535).contains(port) else {
-            return "1–65535 범위의 숫자여야 합니다"
+            return String(localized: "content.conflict.invalidRange", defaultValue: "1–65535 범위의 숫자여야 합니다")
         }
         if port == conflict.attemptedLocal {
-            return "이미 사용 중인 포트 \(conflict.attemptedLocal)와(과) 달라야 합니다"
+            return String(localized: "content.conflict.samePort", defaultValue: "이미 사용 중인 포트 \(conflict.attemptedLocal)와(과) 달라야 합니다")
         }
         return nil
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: PBLayout.Space.s3) {
-            Text(verbatim: "로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다")
+            Text(String(localized: "content.conflict.title", defaultValue: "로컬 포트 \(conflict.attemptedLocal)이(가) 사용 중입니다"))
                 .font(.headline)
-            Text(verbatim: "다른 로컬 포트를 입력하세요. 리모트는 \(serverDisplayName ?? "서버"):\(conflict.remotePort).")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            TextField("로컬 포트", text: $localPortText)
+            Text(String(
+                localized: "content.conflict.prompt",
+                defaultValue: "다른 로컬 포트를 입력하세요. 리모트는 \(serverDisplayName ?? String(localized: "common.serverFallback", defaultValue: "서버")):\(conflict.remotePort)."
+            ))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            TextField(String(localized: "content.conflict.localPortField", defaultValue: "로컬 포트"), text: $localPortText)
                 .textFieldStyle(.roundedBorder)
             if let message = validationMessage {
                 Text(message)
@@ -125,9 +128,9 @@ struct PortConflictSheet: View {
             }
             HStack {
                 Spacer()
-                Button("취소") { dismiss() }
+                Button(String(localized: "common.cancel", defaultValue: "취소")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("연결") {
+                Button(String(localized: "content.conflict.connect", defaultValue: "연결")) {
                     if let port = parsedPort {
                         onConfirm(port)
                         dismiss()

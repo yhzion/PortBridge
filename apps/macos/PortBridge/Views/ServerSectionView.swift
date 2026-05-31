@@ -17,7 +17,7 @@ struct ServerSectionView: View {
     }
 
     private var activeCountAccessibility: String {
-        "포워딩 중인 포트 \(activeCount)개"
+        String(localized: "server.section.activeCount.accessibility", defaultValue: "포워딩 중인 포트 \(activeCount)개")
     }
 
     private var inactivePorts: [RemotePort] {
@@ -54,7 +54,7 @@ struct ServerSectionView: View {
     private var sectionContent: some View {
         switch section.scanState {
         case .idle:
-            Text("↻ 버튼을 눌러 포트를 스캔하세요")
+            Text(String(localized: "server.section.idle.hint", defaultValue: "↻ 버튼을 눌러 포트를 스캔하세요"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, PBLayout.Space.s1)
@@ -62,12 +62,12 @@ struct ServerSectionView: View {
         case .scanning:
             HStack(spacing: PBLayout.Space.s2) {
                 ProgressView().controlSize(.small)
-                Text("스캔 중…").font(.caption).foregroundStyle(.secondary)
+                Text(String(localized: "server.section.scanning.label", defaultValue: "스캔 중…")).font(.caption).foregroundStyle(.secondary)
             }
             .padding(.vertical, PBLayout.Space.s1)
 
         case .loaded where inactivePorts.isEmpty:
-            Text("포워딩되지 않은 포트 없음")
+            Text(String(localized: "server.section.empty.noInactivePorts", defaultValue: "포워딩되지 않은 포트 없음"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, PBLayout.Space.s1)
@@ -157,7 +157,7 @@ struct ServerSectionView: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
                             .background(Color.PB.accentBadgeBg, in: Capsule())
-                            .help("이 서버에서 포워딩 중인 포트 수")
+                            .help(String(localized: "server.section.activeCount.help", defaultValue: "이 서버에서 포워딩 중인 포트 수"))
                             .accessibilityLabel(activeCountAccessibility)
                     }
                 }
@@ -166,10 +166,17 @@ struct ServerSectionView: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("\(primaryLabel) \(secondaryLabel)")
-            .accessibilityValue(isOffline ? "오프라인" : (section.isExpanded ? "펼침" : "접힘"))
+            .accessibilityValue(isOffline
+                ? String(localized: "server.section.state.offline", defaultValue: "오프라인")
+                : (section.isExpanded
+                    ? String(localized: "server.section.state.expanded", defaultValue: "펼침")
+                    : String(localized: "server.section.state.collapsed", defaultValue: "접힘")))
             .accessibilityHint(isOffline
-                ? "이중 탭하여 재스캔"
-                : "이중 탭하여 \(section.isExpanded ? "접기" : "펼치기")")
+                ? String(localized: "server.section.hint.rescan", defaultValue: "이중 탭하여 재스캔")
+                : String(
+                    localized: "server.section.hint.toggle",
+                    defaultValue: "이중 탭하여 \(section.isExpanded ? String(localized: "common.collapse", defaultValue: "접기") : String(localized: "common.expand", defaultValue: "펼치기"))"
+                ))
 
             if case .scanning = section.scanState {
                 ProgressView().controlSize(.small)
@@ -178,21 +185,21 @@ struct ServerSectionView: View {
                     Image(systemName: "arrow.clockwise").font(.body).foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("\(primaryLabel) 포트 재스캔")
-                .accessibilityLabel("\(primaryLabel) 포트 재스캔")
+                .help(String(localized: "server.section.rescan.help", defaultValue: "\(primaryLabel) 포트 재스캔"))
+                .accessibilityLabel(String(localized: "server.section.rescan.accessibility", defaultValue: "\(primaryLabel) 포트 재스캔"))
             }
 
             Menu {
-                Button("편집…", action: onEdit)
+                Button(String(localized: "server.section.menu.edit", defaultValue: "편집…"), action: onEdit)
                 Divider()
-                Button("삭제", role: .destructive, action: onDelete)
+                Button(String(localized: "server.section.menu.delete", defaultValue: "삭제"), role: .destructive, action: onDelete)
             } label: {
                 Image(systemName: "ellipsis").font(.body).foregroundStyle(.secondary)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .frame(width: 20)
-            .accessibilityLabel("\(primaryLabel) 더보기")
+            .accessibilityLabel(String(localized: "server.section.menu.accessibility", defaultValue: "\(primaryLabel) 더보기"))
         }
         .padding(.vertical, 6)
     }
@@ -314,9 +321,12 @@ private struct AuthFailedView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
-            Label("SSH 키 인증 실패", systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            Label(
+                String(localized: "server.section.authFailed.title", defaultValue: "SSH 키 인증 실패"),
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
             HStack(spacing: PBLayout.Space.s2) {
                 Text(verbatim: copyCommand)
                     .font(.system(.caption, design: .monospaced))
@@ -334,8 +344,14 @@ private struct AuthFailedView: View {
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
-                .help(copied ? "복사됨" : "복사")
-                .accessibilityLabel(copied ? "복사됨" : "명령 복사")
+                .help(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
+                    localized: "common.copy",
+                    defaultValue: "복사"
+                ))
+                .accessibilityLabel(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
+                    localized: "server.section.authFailed.copyCommand.accessibility",
+                    defaultValue: "명령 복사"
+                ))
             }
         }
         .padding(.vertical, PBLayout.Space.s1)
@@ -361,11 +377,14 @@ private struct ToolInstallGuideView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
-            Label("원격 서버에 ss 또는 lsof가 필요합니다", systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            Label(
+                String(localized: "server.section.toolMissing.title", defaultValue: "원격 서버에 ss 또는 lsof가 필요합니다"),
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
 
-            Text("포트 목록을 조회하려면 둘 중 하나가 설치되어 있어야 합니다.")
+            Text(String(localized: "server.section.toolMissing.description", defaultValue: "포트 목록을 조회하려면 둘 중 하나가 설치되어 있어야 합니다."))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
@@ -408,8 +427,10 @@ private struct InstallCommandRow: View {
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
-            .help(copied ? "복사됨" : "복사")
-            .accessibilityLabel(copied ? "복사됨" : "\(distro) 명령 복사")
+            .help(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(localized: "common.copy", defaultValue: "복사"))
+            .accessibilityLabel(copied
+                ? String(localized: "common.copied", defaultValue: "복사됨")
+                : String(localized: "server.section.toolMissing.copyCommand.accessibility", defaultValue: "\(distro) 명령 복사"))
         }
     }
 

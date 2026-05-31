@@ -56,24 +56,27 @@ struct ServerListView: View {
             }
         }
         .confirmationDialog(
-            "서버 삭제",
+            String(localized: "serverList.deleteConfirm.title", defaultValue: "서버 삭제"),
             isPresented: isDeletePresented,
             presenting: pendingDelete
         ) { server in
-            Button("삭제", role: .destructive) {
+            Button(String(localized: "serverList.deleteConfirm.delete", defaultValue: "삭제"), role: .destructive) {
                 vm.deleteServer(server)
                 pendingDelete = nil
             }
-            Button("취소", role: .cancel) {
+            Button(String(localized: "common.cancel", defaultValue: "취소"), role: .cancel) {
                 pendingDelete = nil
             }
         } message: { server in
             let label = server.name ?? server.host
             let active = activeForwardingCount(for: server.id)
             if active > 0 {
-                Text(verbatim: "'\(label)'을(를) 삭제하면 활성 포워딩 \(active)개가 종료됩니다. 이 동작은 되돌릴 수 없습니다.")
+                Text(String(
+                    localized: "serverList.deleteConfirm.messageActive",
+                    defaultValue: "'\(label)'을(를) 삭제하면 활성 포워딩 \(active)개가 종료됩니다. 이 동작은 되돌릴 수 없습니다."
+                ))
             } else {
-                Text("'\(label)'을(를) 삭제하시겠습니까? 이 동작은 되돌릴 수 없습니다.")
+                Text(String(localized: "serverList.deleteConfirm.message", defaultValue: "'\(label)'을(를) 삭제하시겠습니까? 이 동작은 되돌릴 수 없습니다."))
             }
         }
     }
@@ -83,13 +86,13 @@ struct ServerListView: View {
             Image(systemName: "server.rack")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.tertiary)
-            Text("등록된 서버가 없습니다")
+            Text(String(localized: "serverList.empty.title", defaultValue: "등록된 서버가 없습니다"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Button {
                 showAddSheet = true
             } label: {
-                Label("서버 추가", systemImage: "plus")
+                Label(String(localized: "serverList.addServer", defaultValue: "서버 추가"), systemImage: "plus")
                     .font(.caption)
             }
             .buttonStyle(.bordered)
@@ -103,12 +106,12 @@ struct ServerListView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.tertiary)
-            Text("'\(vm.searchText)'에 일치하는 결과가 없습니다")
+            Text(String(localized: "serverList.noResults.title", defaultValue: "'\(vm.searchText)'에 일치하는 결과가 없습니다"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
-            Button("검색어 지우기") {
+            Button(String(localized: "serverList.clearSearch", defaultValue: "검색어 지우기")) {
                 vm.searchText = ""
             }
             .buttonStyle(.bordered)
@@ -209,14 +212,14 @@ struct ServerListView: View {
     private var serverListHeader: some View {
         HStack(spacing: PBLayout.Space.s2) {
             if vm.serverSections.isEmpty {
-                Text("서버를 추가하세요")
+                Text(String(localized: "serverList.addServerPrompt", defaultValue: "서버를 추가하세요"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 Image(systemName: "magnifyingglass")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextField("포트 번호나 프로세스 이름으로 찾기", text: $vm.searchText)
+                TextField(String(localized: "serverList.searchPlaceholder", defaultValue: "포트 번호나 프로세스 이름으로 찾기"), text: $vm.searchText)
                     .textFieldStyle(.plain)
                     .focused($isSearchFocused)
                     .controlSize(.small)
@@ -243,7 +246,7 @@ struct ServerListView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("검색어 지우기")
+                    .help(String(localized: "serverList.clearSearch", defaultValue: "검색어 지우기"))
                 }
             }
 
@@ -257,8 +260,8 @@ struct ServerListView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("전체 서버 포트 새로고침 (⌘R)")
-            .accessibilityLabel("전체 서버 포트 새로고침")
+            .help(String(localized: "serverList.refreshAll.help", defaultValue: "전체 서버 포트 새로고침 (⌘R)"))
+            .accessibilityLabel(String(localized: "serverList.refreshAll.label", defaultValue: "전체 서버 포트 새로고침"))
             .keyboardShortcut("r", modifiers: .command)
 
             Button {
@@ -269,8 +272,8 @@ struct ServerListView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("서버 추가 (⌘N)")
-            .accessibilityLabel("서버 추가")
+            .help(String(localized: "serverList.addServer.help", defaultValue: "서버 추가 (⌘N)"))
+            .accessibilityLabel(String(localized: "serverList.addServer", defaultValue: "서버 추가"))
             .keyboardShortcut("n", modifiers: .command)
         }
         .padding(.horizontal, PBLayout.Space.s3)
