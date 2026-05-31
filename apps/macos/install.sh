@@ -15,11 +15,15 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 APP_TARGET="/Applications/PortBridge.app"
 
 echo "▶ Release 빌드…"
+# ENABLE_DEBUG_DYLIB=NO: Xcode 16+ 기본값(YES)은 Release `build`에서도 앱을
+# 셤 + PortBridge.debug.dylib로 분리한다. ad-hoc 재서명 시 셤/dylib Team ID가
+# 어긋나 dyld가 launch 시 abort("열 수 없습니다"). 모놀리식 바이너리로 강제.
 xcodebuild \
   -project PortBridge.xcodeproj \
   -scheme PortBridge \
   -configuration Release \
   CODE_SIGNING_ALLOWED=NO \
+  ENABLE_DEBUG_DYLIB=NO \
   clean build \
   > /tmp/portbridge-build.log 2>&1 \
   || { echo "✘ 빌드 실패. /tmp/portbridge-build.log 확인"; exit 1; }

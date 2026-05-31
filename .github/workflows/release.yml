@@ -29,12 +29,17 @@ jobs:
       - name: Build Release app
         run: |
           set -euo pipefail
+          # ENABLE_DEBUG_DYLIB=NO: Xcode 16+ default (YES) splits even a Release
+          # `build` into a shim + PortBridge.debug.dylib. The later ad-hoc re-sign
+          # gives shim and dylib mismatched Team IDs, so dyld aborts at launch.
+          # Force a monolithic binary (archive would do this implicitly; build won't).
           xcodebuild \
             -project PortBridge.xcodeproj \
             -scheme PortBridge \
             -configuration Release \
             -derivedDataPath build/Release \
             CODE_SIGNING_ALLOWED=NO \
+            ENABLE_DEBUG_DYLIB=NO \
             clean build
 
       - name: Ad-hoc sign and package
