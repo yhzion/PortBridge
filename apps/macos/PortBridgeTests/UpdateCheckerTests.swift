@@ -77,6 +77,19 @@ final class UpdateCheckerTests: XCTestCase {
         }
     }
 
+    func test_checkNow_doubleDigitMinorIsNewer() async {
+        // 0.10.0 > 0.9.0 — locks the core numeric comparison across the FFI boundary
+        // (the lexicographic trap a naive string compare would fall into). Replaces
+        // the macOS-side coverage removed with Swift's hand-rolled Comparable.
+        let fetcher = MockReleaseFetcher(result: .success(release("v0.10.0")))
+        let checker = UpdateChecker(
+            fetcher: fetcher, defaults: defaults, preferences: makePrefs(),
+            currentVersion: SemanticVersion(string: "0.9.0")
+        )
+        await checker.checkNow()
+        XCTAssertEqual(checker.phase, .available(release("v0.10.0")))
+    }
+
     func test_skipCurrent_suppressesAvailable() async {
         let fetcher = MockReleaseFetcher(result: .success(release("v0.2.0")))
         let checker = UpdateChecker(

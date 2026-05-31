@@ -78,7 +78,10 @@ final class UpdateChecker {
                 }
                 return
             }
-            let isNewer = remote > current
+            // Version verdict runs in core via the `updateAvailable` FFI (single
+            // source of truth for parse + compare). `remote` (core-parsed above)
+            // is retained for skip-version identity, which is value equality.
+            let isNewer = updateAvailable(current: current.ffiDto, latest: info.ffiDto)
             let isSkipped = (skippedVersion == remote)
             if isNewer && !isSkipped {
                 phase = .available(info)
