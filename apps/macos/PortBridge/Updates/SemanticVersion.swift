@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct SemanticVersion: Comparable, Hashable {
+nonisolated struct SemanticVersion: Hashable {
     let major: Int
     let minor: Int
     let patch: Int
@@ -11,29 +11,27 @@ nonisolated struct SemanticVersion: Comparable, Hashable {
         self.patch = patch
     }
 
+    /// Parses via the core `parseSemver` FFI — the single source of truth for the
+    /// SemVer rules (strip a leading `v`, digits/`.` only, exactly 2–3 parts).
+    /// Returns nil on any rejected form (pre-release, build metadata, wrong arity).
     init?(string: String) {
-        var s = string
-        if s.hasPrefix("v") { s.removeFirst() }
-        let allowed: Set<Character> = Set("0123456789.")
-        guard !s.isEmpty, s.allSatisfy({ allowed.contains($0) }) else { return nil }
-        let parts = s.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 2 || parts.count == 3 else { return nil }
-        guard let major = Int(parts[0]), let minor = Int(parts[1]) else { return nil }
-        let patch: Int
-        if parts.count == 3 {
-            guard let p = Int(parts[2]) else { return nil }
-            patch = p
-        } else {
-            patch = 0
-        }
-        self.init(major: major, minor: minor, patch: patch)
+        guard let dto = parseSemver(input: string) else { return nil }
+        self.init(major: Int(dto.major), minor: Int(dto.minor), patch: Int(dto.patch))
     }
 
     var string: String {
         "\(major).\(minor).\(patch)"
     }
 
-    static func < (lhs: Self, rhs: Self) -> Bool {
-        (lhs.major, lhs.minor, lhs.patch) < (rhs.major, rhs.minor, rhs.patch)
+    /// Bridges to the FFI DTO so core (`updateAvailable`) can judge this version.
+    /// Components are always non-negative in practice (built via the u32-bounded
+    /// `init?(string:)`); `clamping` keeps the boundary total without trapping on
+    /// same-module misuse, mirroring the checked FFI conversions elsewhere.
+    var ffiDto: SemanticVersionDto {
+        SemanticVersionDto(
+            major: UInt32(clamping: major),
+            minor: UInt32(clamping: minor),
+            patch: UInt32(clamping: patch)
+        )
     }
 }

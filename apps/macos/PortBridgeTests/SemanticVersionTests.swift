@@ -35,17 +35,10 @@ final class SemanticVersionTests: XCTestCase {
         XCTAssertNil(SemanticVersion(string: "1.2.3.4"))
     }
 
-    func test_comparison_basic() throws {
-        XCTAssertTrue(try XCTUnwrap(SemanticVersion(string: "0.2.0")) > SemanticVersion(string: "0.1.9")!)
-    }
-
-    func test_comparison_avoidsLexicographicTrap() throws {
-        XCTAssertTrue(try XCTUnwrap(SemanticVersion(string: "0.10.0")) > SemanticVersion(string: "0.9.0")!)
-    }
-
-    func test_comparison_majorDominates() throws {
-        XCTAssertTrue(try XCTUnwrap(SemanticVersion(string: "1.0.0")) > SemanticVersion(string: "0.99.99")!)
-    }
+    // Version comparison parity now lives in core (`update_available`, exercised
+    // through `UpdateChecker.checkNow` in UpdateCheckerTests); Swift's `Comparable`
+    // conformance was removed with the hand-rolled parser. The parse cases above
+    // are the parity gate for the core-backed `SemanticVersion(string:)`.
 
     func test_string_roundtrip() {
         let v = SemanticVersion(major: 1, minor: 2, patch: 3)

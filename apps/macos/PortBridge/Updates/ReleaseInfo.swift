@@ -18,4 +18,17 @@ nonisolated struct ReleaseInfo: Decodable, Equatable {
     var version: SemanticVersion? {
         SemanticVersion(string: tagName)
     }
+
+    /// Bridges to the FFI DTO so core (`updateAvailable`) can judge this release.
+    /// Core reads `tag_name` for the verdict; the remaining fields are mapped
+    /// faithfully for completeness.
+    var ffiDto: ReleaseInfoDto {
+        ReleaseInfoDto(
+            tagName: tagName,
+            name: name,
+            htmlUrl: htmlURL.absoluteString,
+            publishedAt: publishedAt?.formatted(.iso8601),
+            body: body
+        )
+    }
 }
