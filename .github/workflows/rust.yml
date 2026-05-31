@@ -8,7 +8,11 @@ on:
 jobs:
   build-test:
     name: Build, test, format
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -18,5 +22,7 @@ jobs:
       - name: Test
         run: cargo test --workspace --verbose
 
+      # fmt is platform-independent — run it once (ubuntu) to avoid matrix dupes.
       - name: Format check
+        if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all -- --check
