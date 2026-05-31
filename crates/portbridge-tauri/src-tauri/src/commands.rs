@@ -170,7 +170,9 @@ pub fn server_save(app: AppHandle, servers: Vec<Server>) -> Result<(), String> {
 // 즐겨찾기 ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn favorites_list(app: AppHandle) -> Result<Vec<portbridge_core::persistence::Favorite>, String> {
+pub fn favorites_list(
+    app: AppHandle,
+) -> Result<Vec<portbridge_core::persistence::Favorite>, String> {
     store::load_favorites(&open_store(&app))
 }
 
@@ -190,7 +192,10 @@ pub fn prefs_load(app: AppHandle) -> Result<portbridge_core::persistence::Prefs,
 }
 
 #[tauri::command]
-pub fn prefs_save(app: AppHandle, prefs: portbridge_core::persistence::Prefs) -> Result<(), String> {
+pub fn prefs_save(
+    app: AppHandle,
+    prefs: portbridge_core::persistence::Prefs,
+) -> Result<(), String> {
     store::save_prefs(&open_store(&app), &prefs)
 }
 
@@ -209,9 +214,8 @@ pub fn forwarding_start(
     };
     let id = new_forwarding_id();
     let settle = std::time::Duration::from_millis(1500);
-    let (forwarding, process) =
-        start_forwarding(&ProcessTunnelSpawner, id, &server, &spec, settle)
-            .map_err(|e| e.to_string())?;
+    let (forwarding, process) = start_forwarding(&ProcessTunnelSpawner, id, &server, &spec, settle)
+        .map_err(|e| e.to_string())?;
 
     let dto = ForwardingDto::from(forwarding.clone());
     state

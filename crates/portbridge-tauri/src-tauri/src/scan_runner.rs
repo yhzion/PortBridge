@@ -90,7 +90,11 @@ mod tests {
     #[test]
     fn run_captures_stderr_and_nonzero_exit() {
         let r = ProcessRunner
-            .run("/bin/sh", &["-c", "printf oops >&2; exit 3"], Duration::from_secs(5))
+            .run(
+                "/bin/sh",
+                &["-c", "printf oops >&2; exit 3"],
+                Duration::from_secs(5),
+            )
             .expect("should run");
         assert_eq!(r.exit_code, 3);
         assert_eq!(r.stderr, "oops");

@@ -1,0 +1,104 @@
+/* PortBridge 디자인 토큰 — apps/macos `DesignTokens.swift` + `Layout.swift`의 CSS 미러.
+ *
+ * SSOT는 이 파일이다. Layout(radius/space)은 1:1 매핑. 색상 다수는 macOS 시스템 시맨틱
+ * 컬러(.windowBackgroundColor/.labelColor 등)와 Liquid Glass 머티리얼이라 웹 직접 등가가
+ * 없어 라이트/다크 근사값으로 매핑한다 — 픽셀 대조 보정은 실제 화면이 생기는 S3에서.
+ *
+ * 테마: ThemeProvider가 documentElement에 data-theme="light|dark"를 설정한다.
+ * JS 로드 전 FOUC 방지용으로 prefers-color-scheme 폴백도 둔다. */
+
+:root {
+  /* ── Radius (PBLayout.Radius, pt→px) ── */
+  --pb-radius-sm: 6px;
+  --pb-radius-md: 10px;
+  --pb-radius-lg: 14px;
+  --pb-radius-xl: 22px;
+
+  /* ── Space (PBLayout.Space, 4pt 베이스) ── */
+  --pb-space-1: 4px;
+  --pb-space-2: 8px;
+  --pb-space-3: 12px;
+  --pb-space-4: 16px;
+  --pb-space-5: 20px;
+  --pb-space-6: 28px;
+
+  /* ── Accent (사용자 강조색; 기본 macOS systemBlue) ──
+   * RGB 컴포넌트로 두어 opacity 변주를 rgba()로 표현(Color.accentColor.opacity(...) 등가). */
+  --pb-accent-rgb: 0, 122, 255;
+  --pb-accent: rgb(var(--pb-accent-rgb));
+  --pb-accent-bg-idle: rgba(var(--pb-accent-rgb), 0.06);
+  --pb-accent-bg-hover: rgba(var(--pb-accent-rgb), 0.15);
+  --pb-accent-bg-pressed: rgba(var(--pb-accent-rgb), 0.25);
+  --pb-accent-stroke-subtle: rgba(var(--pb-accent-rgb), 0.18);
+  --pb-accent-stroke-hover: rgba(var(--pb-accent-rgb), 0.35);
+  --pb-accent-badge-bg: rgba(var(--pb-accent-rgb), 0.14);
+
+  /* ── Monogram 변조 파라미터 (DesignTokens.PB.Monogram) ── */
+  --pb-monogram-saturation: 0.55;
+  --pb-monogram-brightness: 0.85;
+  --pb-monogram-fill-opacity: 0.18;
+  --pb-monogram-stroke-opacity: 0.4;
+
+  /* ── System Accent Palette 13종 (DesignTokens.PB.Accent; macOS systemXxx 근사) ── */
+  --pb-color-red: #ff3b30;
+  --pb-color-orange: #ff9500;
+  --pb-color-yellow: #ffcc00;
+  --pb-color-green: #28cd41;
+  --pb-color-mint: #00c7be;
+  --pb-color-teal: #59adc4;
+  --pb-color-cyan: #55bef0;
+  --pb-color-blue: #007aff;
+  --pb-color-indigo: #5856d6;
+  --pb-color-purple: #af52de;
+  --pb-color-pink: #ff2d55;
+  --pb-color-brown: #a2845e;
+  --pb-color-gray: #8e8e93;
+
+  /* ── 표면/텍스트/구분선 (라이트; 시스템 시맨틱 근사) ── */
+  --pb-bg-canvas: #ececec; /* .windowBackgroundColor */
+  --pb-bg-surface: #ffffff; /* .controlBackgroundColor (Tahoe: 캔버스보다 밝음) */
+  --pb-bg-surface-secondary: #f5f5f7; /* .underPageBackgroundColor */
+  --pb-text-primary: rgba(0, 0, 0, 0.85); /* .labelColor */
+  --pb-text-secondary: rgba(0, 0, 0, 0.5); /* .secondaryLabelColor */
+  --pb-text-tertiary: rgba(0, 0, 0, 0.26); /* .tertiaryLabelColor */
+  --pb-text-placeholder: rgba(0, 0, 0, 0.25); /* .placeholderTextColor */
+  --pb-separator: rgba(0, 0, 0, 0.1); /* .separatorColor */
+  --pb-input-border: #8e8e93; /* PB.inputBorder (light) */
+  --pb-input-border-focused: var(--pb-accent); /* PB.inputBorderFocused */
+
+  /* ── Glass (Liquid Glass → backdrop-filter 근사) ── */
+  --pb-glass-blur-thin: 12px;
+  --pb-glass-blur-regular: 20px;
+  --pb-glass-blur-thick: 30px;
+  --pb-glass-bg: rgba(255, 255, 255, 0.6);
+}
+
+/* 다크 토큰 — ThemeProvider가 명시 설정한 경우. */
+:root[data-theme="dark"] {
+  --pb-bg-canvas: #1e1e1e;
+  --pb-bg-surface: #2c2c2e;
+  --pb-bg-surface-secondary: #252527;
+  --pb-text-primary: rgba(255, 255, 255, 0.85);
+  --pb-text-secondary: rgba(255, 255, 255, 0.55);
+  --pb-text-tertiary: rgba(255, 255, 255, 0.26);
+  --pb-text-placeholder: rgba(255, 255, 255, 0.25);
+  --pb-separator: rgba(255, 255, 255, 0.1);
+  --pb-input-border: #6e6e76; /* PB.inputBorder (dark) */
+  --pb-glass-bg: rgba(40, 40, 42, 0.6);
+}
+
+/* FOUC 폴백 — JS가 data-theme를 붙이기 전, 시스템이 다크면 다크 토큰 적용. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --pb-bg-canvas: #1e1e1e;
+    --pb-bg-surface: #2c2c2e;
+    --pb-bg-surface-secondary: #252527;
+    --pb-text-primary: rgba(255, 255, 255, 0.85);
+    --pb-text-secondary: rgba(255, 255, 255, 0.55);
+    --pb-text-tertiary: rgba(255, 255, 255, 0.26);
+    --pb-text-placeholder: rgba(255, 255, 255, 0.25);
+    --pb-separator: rgba(255, 255, 255, 0.1);
+    --pb-input-border: #6e6e76;
+    --pb-glass-bg: rgba(40, 40, 42, 0.6);
+  }
+}
