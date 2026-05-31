@@ -118,6 +118,14 @@ impl From<Forwarding> for ForwardingDto {
 pub struct ForwardSpecDto {
     pub remote_port: u16,
     pub local_port: u16,
+    /// 포워딩 대상 호스트(SSH 서버 입장). 생략 시 `localhost`(기존 동작 호환).
+    #[serde(default = "default_remote_host")]
+    pub remote_host: String,
+}
+
+/// `ForwardSpecDto.remote_host` 기본값 — 원격 머신 자신.
+fn default_remote_host() -> String {
+    "localhost".to_string()
 }
 
 // ── 저장소 헬퍼: AppHandle → FileStore ────────────────────────────────────
@@ -211,6 +219,7 @@ pub fn forwarding_start(
     let spec = ForwardSpec {
         remote_port: spec.remote_port,
         local_port: spec.local_port,
+        remote_host: spec.remote_host,
     };
     let id = new_forwarding_id();
     let settle = std::time::Duration::from_millis(1500);
@@ -261,6 +270,7 @@ pub fn forward_args_preview(server: Server, spec: ForwardSpecDto) -> Vec<String>
         &ForwardSpec {
             remote_port: spec.remote_port,
             local_port: spec.local_port,
+            remote_host: spec.remote_host,
         },
     )
 }

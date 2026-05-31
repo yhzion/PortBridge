@@ -20,11 +20,28 @@ use crate::model::{Forwarding, PortBridgeError, Server, State};
 /// 터널이 사용하는 ssh 실행 파일. `scan`과 동일(절대 경로 고정).
 const SSH_EXECUTABLE: &str = "/usr/bin/ssh";
 
-/// 포워딩 1건의 명세(로컬↔원격 포트). `-L <local>:localhost:<remote>` 로 조립된다.
+/// 포워딩 1건의 명세. `-L <local>:<remote_host>:<remote>` 로 조립된다.
+///
+/// `remote_host`는 SSH 서버 입장에서 본 포워딩 대상 호스트다. `"localhost"`이면 원격
+/// 머신 자신(데스크탑/Tauri 기본), 비-localhost(예: `"10.0.0.5"`)이면 SSH 서버를 경유해
+/// 도달 가능한 제3의 머신으로 포워딩한다. `localhost` 기본값은 [`ForwardSpec::to_local`]로
+/// 생성한다.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ForwardSpec {
     pub remote_port: u16,
     pub local_port: u16,
+    pub remote_host: String,
+}
+
+impl ForwardSpec {
+    /// 원격 머신 자신의 `localhost:remote_port`로 향하는 명세(기존 기본 동작).
+    pub fn to_local(local_port: u16, remote_port: u16) -> Self {
+        Self {
+            remote_port,
+            local_port,
+            remote_host: "localhost".to_string(),
+        }
+    }
 }
 
 /// 시작한 터널 자식 프로세스의 핸들 추상화. `std::process::Child`를 감싸되, 테스트에서
@@ -53,9 +70,10 @@ pub trait TunnelSpawner {
 /// 캐노니컬 `ssh -L` 인자를 조립한다(실행 파일 제외). 이 함수가 Swift/CLI에 흩어져
 /// 있던 ssh argv 조립의 단일 출처다.
 ///
-/// 데스크탑(macOS) 동작과 정합: `-L <local>:localhost:<remote>` 로 **원격 머신 자신의**
-/// `localhost:remote_port` 에 연결한다. `ExitOnForwardFailure=yes` + `BatchMode=yes` 로
-/// 바인드/인증 실패 시 ssh가 즉시 종료해 조기 사망 감지를 가능케 한다.
+/// `-L <local>:<remote_host>:<remote>` 로 SSH 서버 입장의 `remote_host:remote_port` 에
+/// 연결한다. `remote_host`가 `"localhost"`(기본)이면 원격 머신 자신, 비-localhost이면
+/// 서버 경유 제3 머신. `ExitOnForwardFailure=yes` + `BatchMode=yes` 로 바인드/인증 실패
+/// 시 ssh가 즉시 종료해 조기 사망 감지를 가능케 한다.
 pub fn forward_args(server: &Server, spec: &ForwardSpec) -> Vec<String> {
     vec![
         "-N".to_string(),
@@ -72,7 +90,10 @@ pub fn forward_args(server: &Server, spec: &ForwardSpec) -> Vec<String> {
         "-p".to_string(),
         server.port.to_string(),
         "-L".to_string(),
-        format!("{}:localhost:{}", spec.local_port, spec.remote_port),
+        format!(
+            "{}:{}:{}",
+            spec.local_port, spec.remote_host, spec.remote_port
+        ),
         server.ssh_target(),
     ]
 }
@@ -215,10 +236,7 @@ mod tests {
     }
 
     fn spec() -> ForwardSpec {
-        ForwardSpec {
-            remote_port: 5432,
-            local_port: 15432,
-        }
+        ForwardSpec::to_local(15432, 5432)
     }
 
     #[test]
@@ -228,13 +246,36 @@ mod tests {
         assert!(args.contains(&"-N".to_string()));
         assert!(args.contains(&"ExitOnForwardFailure=yes".to_string()));
         assert!(args.contains(&"BatchMode=yes".to_string()));
-        // -L 매핑: 원격 머신의 localhost:remote_port 로
+        // -L 매핑: to_local 기본값은 원격 머신의 localhost:remote_port 로 (하위호환)
         assert!(args.contains(&"15432:localhost:5432".to_string()));
         // -p 와 ssh 포트
         let p = args.iter().position(|a| a == "-p").expect("-p present");
         assert_eq!(args[p + 1], "2222");
         // 마지막은 user@host 타깃
         assert_eq!(args.last().unwrap(), "deploy@10.0.0.1");
+    }
+
+    /// 비-localhost remote_host는 `-L` 값에 그대로 반영된다(서버 경유 제3 머신 포워딩).
+    #[test]
+    fn forward_args_uses_arbitrary_remote_host() {
+        let spec = ForwardSpec {
+            local_port: 8080,
+            remote_port: 5432,
+            remote_host: "10.0.0.5".to_string(),
+        };
+        let args = forward_args(&server(), &spec);
+        assert!(args.contains(&"8080:10.0.0.5:5432".to_string()));
+        // localhost가 잘못 끼어들지 않음
+        assert!(!args.iter().any(|a| a.contains("localhost")));
+    }
+
+    /// `to_local` 생성자는 remote_host를 localhost로 채운다.
+    #[test]
+    fn to_local_sets_localhost() {
+        let spec = ForwardSpec::to_local(15432, 5432);
+        assert_eq!(spec.remote_host, "localhost");
+        assert_eq!(spec.local_port, 15432);
+        assert_eq!(spec.remote_port, 5432);
     }
 
     #[test]
@@ -319,6 +360,32 @@ mod tests {
         assert_eq!(exe, "/usr/bin/ssh");
         assert!(args.iter().any(|a| a == "15432:localhost:5432"));
         assert!(args.iter().any(|a| a == "deploy@10.0.0.1"));
+    }
+
+    /// start_forwarding → forward_args → spawn 경로가 비-localhost remote_host를
+    /// 실제 spawn argv까지 전달하는지 검증(to_local 기본값이 아닌 경로의 end-to-end).
+    #[test]
+    fn start_forwarding_passes_arbitrary_remote_host_to_spawn_argv() {
+        let spawner = MockSpawner::returning(MockTunnelProcess::alive(2));
+        let spec = ForwardSpec {
+            local_port: 8080,
+            remote_port: 5432,
+            remote_host: "10.0.0.5".to_string(),
+        };
+
+        let _ = start_forwarding(
+            &spawner,
+            "fwd-5".to_string(),
+            &server(),
+            &spec,
+            Duration::ZERO,
+        )
+        .expect("should start");
+
+        let calls = spawner.calls.borrow();
+        let (_exe, args) = calls.first().expect("spawner should be called");
+        assert!(args.iter().any(|a| a == "8080:10.0.0.5:5432"));
+        assert!(!args.iter().any(|a| a.contains("localhost")));
     }
 
     #[test]
