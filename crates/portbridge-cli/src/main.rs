@@ -177,7 +177,7 @@ enum TunnelCmd {
         /// 종료할 터널의 로컬 포트
         local_port: Option<u16>,
         /// 모든 백그라운드 터널 종료
-        #[arg(long)]
+        #[arg(long, conflicts_with = "local_port")]
         all: bool,
     },
 }
@@ -1709,7 +1709,7 @@ mod tests {
         let out = tunnel_ls(&p, |_| true, true).unwrap();
         assert!(out.contains("\"status\":\"alive\""));
         assert!(out.contains("\"pid\":1"));
-        assert!(out.contains("\"localPort\":8080") || out.contains("\"local_port\":8080"));
+        assert!(out.contains("\"local_port\":8080"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

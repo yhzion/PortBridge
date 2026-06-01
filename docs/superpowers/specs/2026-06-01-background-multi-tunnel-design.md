@@ -111,6 +111,7 @@ detach/setsid 자체는 단위 테스트가 비현실적 → **수동 스모크*
 
 - **PID 재사용 레이스**: ssh가 죽고 OS가 PID를 재활용하면 `ls`가 alive로, `stop`이 무고한 프로세스를 SIGTERM할 수 있다. 단일 사용자·저확률 → 문서화.
 - **동시 start 레이스**: 원자적 rename은 각 쓰기를 원자화하나 read-modify-write 전체는 아니다 → 병렬 `start` 2건이 레코드를 유실해 `stop` 불가한 orphan ssh가 생길 수 있다. 순차/단일 사용자 가정.
+- **start 저장 실패 orphan**: ssh가 settle을 살아남은 뒤 `tunnels.json` 저장이 실패하면(저확률 — 원자적 write) 기록되지 않은 live ssh가 남아 CLI로 `stop`할 수 없다. 저확률 수용.
 - **Unix 전용**: `/usr/bin/ssh`·시그널·setsid·reparent는 모두 unix.
 - launchd/systemd 자동시작은 별도 과제(이번 범위 밖).
 
