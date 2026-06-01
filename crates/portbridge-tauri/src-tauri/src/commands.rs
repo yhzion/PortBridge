@@ -20,7 +20,9 @@ use portbridge_core::tunnel::{forward_args, start_forwarding, ForwardSpec};
 
 use crate::scan_runner::ProcessRunner;
 use crate::store::{self, FileStore};
-use crate::tunnel_runtime::{new_forwarding_id, ProcessTunnelSpawner, TunnelRegistry};
+use crate::tunnel_runtime::{
+    new_forwarding_id, register_or_kill, ProcessTunnelSpawner, TunnelRegistry,
+};
 
 /// 활성 터널 레지스트리 — `tauri::State`로 보유(소비처 상태, core는 무상태).
 pub struct AppState {
@@ -227,11 +229,7 @@ pub fn forwarding_start(
         .map_err(|e| e.to_string())?;
 
     let dto = ForwardingDto::from(forwarding.clone());
-    state
-        .tunnels
-        .lock()
-        .map_err(|_| "터널 레지스트리 잠금 실패".to_string())?
-        .insert(forwarding, process);
+    register_or_kill(&state.tunnels, forwarding, process)?;
     Ok(dto)
 }
 
