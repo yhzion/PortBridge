@@ -18,6 +18,7 @@ use portbridge_core::ssh_config::{resolve_host, ResolvedHost};
 use portbridge_core::tunnel::{self, ForwardSpec, TunnelProcess, TunnelSpawner};
 
 mod store;
+mod tunnels;
 
 // ── ProcessRunner: std::process::Command 기반 CommandRunner 구현 ──────────
 
