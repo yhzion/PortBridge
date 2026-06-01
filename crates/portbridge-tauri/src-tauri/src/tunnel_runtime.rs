@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use portbridge_core::model::Forwarding;
@@ -72,6 +73,18 @@ impl TunnelProcess for ChildTunnelProcess {
     }
 }
 
+/// 앱 종료 등으로 핸들이 드롭될 때 실행 중인 ssh 자식을 reap한다. `std::process::Child`는
+/// 드롭 시 자식을 종료하지 않으므로(문서화된 동작) Drop 없이는 고아가 남아 포트를 점유
+/// → 재실행 시 충돌한다. 실행 중이면 `kill`+`wait`, 이미 종료면 무시(idempotent).
+impl Drop for ChildTunnelProcess {
+    fn drop(&mut self) {
+        if let Ok(None) = self.child.try_wait() {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
+
 /// ssh를 자식 프로세스로 띄우는 [`TunnelSpawner`].
 pub struct ProcessTunnelSpawner;
 
@@ -128,6 +141,27 @@ impl TunnelRegistry {
     /// 현재 보유 중인 포워딩 메타 목록(UI 표시용).
     pub fn list(&self) -> Vec<Forwarding> {
         self.meta.values().cloned().collect()
+    }
+}
+
+/// 시작된 터널을 레지스트리에 등록한다. 잠금 실패(poison) 시 이미 떠 있는 자식을
+/// 고아로 남기지 않도록 `kill`한 뒤 에러를 반환한다(commands 레이어가 Tauri 비의존
+/// 로직을 위임받는 지점 — 그래서 free fn).
+pub fn register_or_kill(
+    tunnels: &Mutex<TunnelRegistry>,
+    forwarding: Forwarding,
+    mut process: Box<dyn TunnelProcess>,
+) -> Result<(), String> {
+    match tunnels.lock() {
+        Ok(mut guard) => {
+            guard.insert(forwarding, process);
+            Ok(())
+        }
+        Err(_) => {
+            // 등록 실패 → 이미 떠 있는 자식을 kill해 고아 방지.
+            let _ = process.kill();
+            Err("터널 레지스트리 잠금 실패".to_string())
+        }
     }
 }
 
@@ -216,5 +250,66 @@ mod tests {
     #[test]
     fn new_forwarding_id_has_prefix() {
         assert!(new_forwarding_id().starts_with("fwd-"));
+    }
+
+    // ── #125-1: 레지스트리 등록 ──────────────────────────────────────────────
+
+    #[test]
+    fn register_or_kill_inserts_when_lock_ok() {
+        let tunnels = Mutex::new(TunnelRegistry::new());
+        let killed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let res = register_or_kill(
+            &tunnels,
+            forwarding("fwd-1"),
+            Box::new(MockProc {
+                pid: 1,
+                killed: killed.clone(),
+            }),
+        );
+        assert!(res.is_ok());
+        assert!(!killed.load(std::sync::atomic::Ordering::Relaxed));
+        assert_eq!(tunnels.lock().unwrap().list().len(), 1);
+    }
+
+    #[test]
+    fn register_or_kill_kills_process_when_lock_poisoned() {
+        let tunnels = Mutex::new(TunnelRegistry::new());
+        // 가드를 든 채 패닉 → 뮤텍스 poison.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _g = tunnels.lock().unwrap();
+            panic!("poison the mutex");
+        }));
+        let killed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let res = register_or_kill(
+            &tunnels,
+            forwarding("fwd-1"),
+            Box::new(MockProc {
+                pid: 1,
+                killed: killed.clone(),
+            }),
+        );
+        assert!(res.is_err(), "poison 시 에러를 반환해야 함");
+        assert!(
+            killed.load(std::sync::atomic::Ordering::Relaxed),
+            "등록 실패 경로에서 떠 있는 자식을 kill해야 함(고아 방지)"
+        );
+    }
+
+    // ── #125-2: ChildTunnelProcess Drop이 자식을 reap ────────────────────────
+
+    #[cfg(unix)]
+    #[test]
+    fn dropping_child_tunnel_process_kills_child() {
+        let child = Command::new("sleep").arg("60").spawn().expect("sleep 실행");
+        let pid = child.id();
+        drop(ChildTunnelProcess::new(child));
+        // Drop은 동기 kill+wait이므로 폴링 없이 즉시 확인 가능.
+        let alive = Command::new("kill")
+            .arg("-0")
+            .arg(pid.to_string())
+            .status()
+            .expect("kill -0 실행")
+            .success();
+        assert!(!alive, "drop 시 자식 프로세스({pid})가 종료돼야 함");
     }
 }
