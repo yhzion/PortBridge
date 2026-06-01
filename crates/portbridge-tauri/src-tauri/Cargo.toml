@@ -28,4 +28,7 @@ tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 portbridge-core = { path = "../../portbridge-core" }
+# 업데이트 체크(#133 항목5): 동기 HTTP(core ReleaseFetcher trait 충족) + 릴리스 URL 열기.
+ureq = "2"
+open = "5"
 

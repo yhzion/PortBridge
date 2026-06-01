@@ -13,6 +13,7 @@ mod native_policy;
 mod scan_runner;
 mod store;
 mod tunnel_runtime;
+mod update_check;
 
 use commands::AppState;
 use tauri::{
@@ -55,6 +56,8 @@ pub fn run() {
                 autostart_on,
                 None::<&str>,
             )?;
+            let update_item =
+                MenuItem::with_id(app, "check_update", "업데이트 확인", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
             #[cfg(target_os = "macos")]
             let dock_item = CheckMenuItem::with_id(
@@ -67,9 +70,18 @@ pub fn run() {
             )?;
 
             #[cfg(target_os = "macos")]
-            let menu = Menu::with_items(app, &[&show_item, &dock_item, &login_item, &quit_item])?;
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &show_item,
+                    &dock_item,
+                    &login_item,
+                    &update_item,
+                    &quit_item,
+                ],
+            )?;
             #[cfg(not(target_os = "macos"))]
-            let menu = Menu::with_items(app, &[&show_item, &login_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&show_item, &login_item, &update_item, &quit_item])?;
 
             // 핸들러에서 체크 상태를 갱신하려면 항목 핸들 클론을 캡처(CheckMenuItem은 Clone).
             let login_h = login_item.clone();
@@ -114,6 +126,11 @@ pub fn run() {
                         let _ = crate::store::save_prefs(&store, &prefs);
                         crate::native_policy::apply_dock_policy(app, prefs.show_in_dock);
                         let _ = dock_h.set_checked(prefs.show_in_dock);
+                    }
+                    // 수동 업데이트 확인: core check_update → 새 버전이면 릴리스 페이지 열기.
+                    // 비교 대상은 앱 버전(tauri.conf.json) — core::version()(0.0.0) 아님.
+                    "check_update" => {
+                        crate::update_check::check_now(&app.package_info().version.to_string())
                     }
                     "quit" => app.exit(0),
                     _ => {}
