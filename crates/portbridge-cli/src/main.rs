@@ -3,8 +3,11 @@
 //! 프로세스 실행·인자 파싱·출력 포매팅만 담당하는 얇은 어댑터.
 //! 모든 로직(파싱, 에러 분류, 중복 제거, 필터링)은 core에 위임한다.
 
+use std::fs::OpenOptions;
 use std::io::Read;
 use std::ops::RangeInclusive;
+use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -670,6 +673,99 @@ impl TunnelSpawner for ProcessTunnelSpawner {
                 stderr: format!("spawn failed: {e}"),
             })?;
         Ok(Box::new(ChildTunnelProcess::new(child)))
+    }
+}
+
+// ── 백그라운드(detach) TunnelSpawner 구현 ─────────────────────────────────
+//
+// foreground와 달리 stderr를 부모 파이프가 아닌 **로그파일**로 보내고(부모 종료 후
+// EPIPE로 터널이 죽는 것을 막고 DEAD 사유를 보존), `setsid()`로 자식을 독립 session에
+// 두어 터미널 닫힘(SIGHUP)·Ctrl-C(SIGINT)로부터 격리한다. start_forwarding의 1500ms
+// settle 동안에만 부모가 try_wait로 조기사망을 감지하고, Ok 이후엔 핸들을 drop한다
+// (unix Child drop은 kill/wait를 하지 않으므로 ssh는 init으로 reparent돼 생존).
+
+/// detach된 ssh 자식의 핸들. 조기사망 시 로그파일 내용을 사유로 돌려준다.
+struct DetachedTunnelProcess {
+    child: Child,
+    pid: u32,
+    log_path: PathBuf,
+}
+
+impl TunnelProcess for DetachedTunnelProcess {
+    fn poll_exit(&mut self) -> Option<String> {
+        match self.child.try_wait() {
+            Ok(Some(_status)) => {
+                let reason = std::fs::read_to_string(&self.log_path)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
+                Some(reason)
+            }
+            Ok(None) => None,
+            Err(e) => Some(format!("try_wait failed: {e}")),
+        }
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        self.child.kill()?;
+        let _ = self.child.wait();
+        Ok(())
+    }
+
+    fn pid(&self) -> u32 {
+        self.pid
+    }
+}
+
+/// detach spawner. 생성 시 로그파일 경로를 받아 stderr를 그리로 보낸다.
+struct DetachedTunnelSpawner {
+    log_path: PathBuf,
+}
+
+impl TunnelSpawner for DetachedTunnelSpawner {
+    fn spawn(
+        &self,
+        executable: &str,
+        args: &[&str],
+    ) -> Result<Box<dyn TunnelProcess>, PortBridgeError> {
+        // 로그 디렉터리 보장 + append 오픈(부모가 열어 fd를 자식에 상속시킨다).
+        if let Some(parent) = self.log_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| PortBridgeError::ForwardingDiedEarly {
+                stderr: format!("log dir create failed: {e}"),
+            })?;
+        }
+        let log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.log_path)
+            .map_err(|e| PortBridgeError::ForwardingDiedEarly {
+                stderr: format!("log open failed: {e}"),
+            })?;
+
+        let mut cmd = Command::new(executable);
+        cmd.args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(log));
+
+        // SAFETY: pre_exec는 fork 후·exec 전 자식에서 실행된다. setsid는 단일
+        // async-signal-safe 시스템콜이다. 실패(이미 그룹 리더 — fork 직후엔 발생 안 함)는
+        // 무시한다(best-effort detach).
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+
+        let child = cmd.spawn().map_err(|e| PortBridgeError::ForwardingDiedEarly {
+            stderr: format!("spawn failed: {e}"),
+        })?;
+        let pid = child.id();
+        Ok(Box::new(DetachedTunnelProcess {
+            child,
+            pid,
+            log_path: self.log_path.clone(),
+        }))
     }
 }
 
