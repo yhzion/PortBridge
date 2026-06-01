@@ -75,7 +75,9 @@ pub fn remove_by_local_port(
 
 /// 백그라운드 터널의 stderr 로그파일 경로 `<config>/portbridge/logs/tunnel-<port>.log`.
 pub fn log_path(config_dir: &Path, local_port: u16) -> PathBuf {
-    config_dir.join("logs").join(format!("tunnel-{local_port}.log"))
+    config_dir
+        .join("logs")
+        .join(format!("tunnel-{local_port}.log"))
 }
 
 // ── libc 래퍼 (unix) ──────────────────────────────────────────────────────
@@ -189,7 +191,10 @@ mod tests {
     fn remove_by_local_port_removes_one_and_reports() {
         let recs = vec![rec(1, 8080), rec(2, 9090)];
         let (kept, removed) = remove_by_local_port(recs, 8080);
-        assert_eq!(kept.iter().map(|r| r.local_port).collect::<Vec<_>>(), vec![9090]);
+        assert_eq!(
+            kept.iter().map(|r| r.local_port).collect::<Vec<_>>(),
+            vec![9090]
+        );
         assert_eq!(removed.unwrap().pid, 1);
     }
 

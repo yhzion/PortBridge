@@ -679,10 +679,7 @@ fn tunnel_ls(
 
 /// 터널을 STATUS / PID / LOCAL / TARGET / REMOTE 테이블로 포맷한다(순수).
 /// alive 먼저, 그다음 dead. 빈 입력도 헤더를 출력한다.
-fn format_tunnel_table(
-    alive: &[tunnels::TunnelRecord],
-    dead: &[tunnels::TunnelRecord],
-) -> String {
+fn format_tunnel_table(alive: &[tunnels::TunnelRecord], dead: &[tunnels::TunnelRecord]) -> String {
     let rows: Vec<(&str, &tunnels::TunnelRecord)> = alive
         .iter()
         .map(|r| ("alive", r))
@@ -709,16 +706,16 @@ fn format_tunnel_table(
 
 /// 터널 목록을 JSON 배열로 직렬화한다(순수). 각 레코드를 serde_json Value로 만든 뒤
 /// `status` 필드를 주입한다(flatten 미사용 — 참조 flatten 컴파일 리스크 회피).
-fn tunnels_to_json(
-    alive: &[tunnels::TunnelRecord],
-    dead: &[tunnels::TunnelRecord],
-) -> String {
+fn tunnels_to_json(alive: &[tunnels::TunnelRecord], dead: &[tunnels::TunnelRecord]) -> String {
     let mut arr: Vec<serde_json::Value> = Vec::new();
     for (status, recs) in [("alive", alive), ("dead", dead)] {
         for r in recs {
             let mut v = serde_json::to_value(r).unwrap_or(serde_json::Value::Null);
             if let serde_json::Value::Object(ref mut map) = v {
-                map.insert("status".to_string(), serde_json::Value::String(status.to_string()));
+                map.insert(
+                    "status".to_string(),
+                    serde_json::Value::String(status.to_string()),
+                );
             }
             arr.push(v);
         }
@@ -728,7 +725,13 @@ fn tunnels_to_json(
 /// `tunnel stop` 디스패치 — 실제 liveness/kill(libc)과 FileStore를 묶는 I/O 경계.
 fn tunnel_stop_cmd(local_port: Option<u16>, all: bool) {
     let store = store::FileStore::new(store::config_dir());
-    match tunnel_stop(&store, tunnels::is_alive, tunnels::send_sigterm, local_port, all) {
+    match tunnel_stop(
+        &store,
+        tunnels::is_alive,
+        tunnels::send_sigterm,
+        local_port,
+        all,
+    ) {
         Ok(out) => println!("{out}"),
         Err(msg) => {
             eprintln!("error: {msg}");
@@ -758,8 +761,8 @@ fn tunnel_stop(
         return Ok(format!("stopped {n} tunnel(s)"));
     }
 
-    let port = local_port
-        .ok_or_else(|| "local_port 또는 --all 중 하나가 필요합니다".to_string())?;
+    let port =
+        local_port.ok_or_else(|| "local_port 또는 --all 중 하나가 필요합니다".to_string())?;
     let (remaining, removed) = tunnels::remove_by_local_port(alive, port);
     match removed {
         Some(r) => {
@@ -767,7 +770,9 @@ fn tunnel_stop(
             tunnels::save(p, &remaining)?;
             Ok(format!("stopped pid={} (local_port {})", r.pid, port))
         }
-        None => Err(format!("로컬 포트 {port}의 살아있는 백그라운드 터널이 없습니다")),
+        None => Err(format!(
+            "로컬 포트 {port}의 살아있는 백그라운드 터널이 없습니다"
+        )),
     }
 }
 
@@ -963,9 +968,11 @@ impl TunnelSpawner for DetachedTunnelSpawner {
             });
         }
 
-        let child = cmd.spawn().map_err(|e| PortBridgeError::ForwardingDiedEarly {
-            stderr: format!("spawn failed: {e}"),
-        })?;
+        let child = cmd
+            .spawn()
+            .map_err(|e| PortBridgeError::ForwardingDiedEarly {
+                stderr: format!("spawn failed: {e}"),
+            })?;
         let pid = child.id();
         Ok(Box::new(DetachedTunnelProcess {
             child,
@@ -1720,7 +1727,8 @@ mod tests {
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("pb_cli_tun_json_{}_{}", std::process::id(), n));
+        let dir =
+            std::env::temp_dir().join(format!("pb_cli_tun_json_{}_{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&dir);
         let p = store::FileStore::new(dir.clone());
 
@@ -1818,7 +1826,8 @@ mod tests {
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("pb_cli_tun_stop_{}_{}", std::process::id(), n));
+        let dir =
+            std::env::temp_dir().join(format!("pb_cli_tun_stop_{}_{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&dir);
         let p = store::FileStore::new(dir.clone());
         tunnels::save(&p, &[t_rec(11, 8080), t_rec(22, 9090)]).unwrap();
@@ -1838,7 +1847,10 @@ mod tests {
         assert!(out.contains("8080"));
         assert_eq!(*killed.borrow(), vec![11]);
         let after = tunnels::load(&p).unwrap();
-        assert_eq!(after.iter().map(|r| r.local_port).collect::<Vec<_>>(), vec![9090]);
+        assert_eq!(
+            after.iter().map(|r| r.local_port).collect::<Vec<_>>(),
+            vec![9090]
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1856,7 +1868,17 @@ mod tests {
         tunnels::save(&p, &[t_rec(11, 8080), t_rec(22, 9090)]).unwrap();
 
         let killed = RefCell::new(Vec::new());
-        tunnel_stop(&p, |_| true, |pid| { killed.borrow_mut().push(pid); true }, None, true).unwrap();
+        tunnel_stop(
+            &p,
+            |_| true,
+            |pid| {
+                killed.borrow_mut().push(pid);
+                true
+            },
+            None,
+            true,
+        )
+        .unwrap();
         assert_eq!(*killed.borrow(), vec![11, 22]);
         assert_eq!(tunnels::load(&p).unwrap(), vec![]);
 
@@ -1869,7 +1891,8 @@ mod tests {
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("pb_cli_tun_absent_{}_{}", std::process::id(), n));
+        let dir =
+            std::env::temp_dir().join(format!("pb_cli_tun_absent_{}_{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&dir);
         let p = store::FileStore::new(dir.clone());
         tunnels::save(&p, &[t_rec(11, 8080)]).unwrap();
