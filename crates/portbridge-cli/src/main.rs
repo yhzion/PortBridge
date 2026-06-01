@@ -235,6 +235,14 @@ fn new_server_id() -> String {
     format!("srv-{nanos:x}")
 }
 
+/// 현재 unix epoch 초. 터널 started_at 기록용(core는 clockless 유지).
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 /// 서버를 저장한다. `(user,host,port)` 중복은 거부(Desktop `isDuplicate` 동치).
 fn server_add(
     p: &dyn Persistence,
@@ -559,8 +567,70 @@ fn tunnel_run(target: &str, forward: &str, port: Option<u16>) {
     }
 }
 
-fn tunnel_start(_target: &str, _forward: &str, _port: Option<u16>) {
-    unimplemented!("Task 5")
+/// 백그라운드 터널을 시작한다. 죽은 항목을 먼저 정리하고, 같은 local_port를 점유한
+/// 살아있는 터널이 있으면 거부한다. core start_forwarding(detach spawner, 1500ms settle)으로
+/// 조기사망을 감지한 뒤 레코드를 영속한다.
+fn tunnel_start(target: &str, forward: &str, port: Option<u16>) {
+    let store = store::FileStore::new(store::config_dir());
+    let server = resolve_server(&store, target, port).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+    let spec = parse_forward_spec(forward).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+
+    // 죽은 항목 정리(#113) + local_port 충돌 검사.
+    let existing = tunnels::load(&store).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+    let (mut alive, _dead) = tunnels::partition_alive(existing, tunnels::is_alive);
+    if alive.iter().any(|r| r.local_port == spec.local_port) {
+        eprintln!(
+            "error: 로컬 포트 {}를 이미 사용하는 백그라운드 터널이 있습니다 (tunnel stop {} 먼저)",
+            spec.local_port, spec.local_port
+        );
+        std::process::exit(1);
+    }
+
+    let log_path = tunnels::log_path(&store::config_dir(), spec.local_port);
+    let spawner = DetachedTunnelSpawner {
+        log_path: log_path.clone(),
+    };
+    let id = format!("{}:{}", spec.local_port, spec.remote_port);
+    match tunnel::start_forwarding(&spawner, id, &server, &spec, Duration::from_millis(1500)) {
+        Ok((forwarding, process)) => {
+            let pid = process.pid();
+            // process(핸들) drop — unix Child drop은 kill/wait를 안 하므로 ssh는 생존한다.
+            drop(process);
+
+            alive.push(tunnels::TunnelRecord {
+                pid,
+                local_port: forwarding.local_port,
+                remote_host: spec.remote_host.clone(),
+                remote_port: forwarding.remote_port,
+                target: format!("{}@{}:{}", server.user, server.host, server.port),
+                started_at: now_secs(),
+            });
+            if let Err(msg) = tunnels::save(&store, &alive) {
+                eprintln!("error: {msg}");
+                std::process::exit(1);
+            }
+            println!(
+                "started pid={pid}  127.0.0.1:{} → {}:{}  (log: {})",
+                forwarding.local_port,
+                spec.remote_host,
+                forwarding.remote_port,
+                log_path.display()
+            );
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
 }
 fn tunnel_ls_cmd(_json: bool) {
     unimplemented!("Task 6")
