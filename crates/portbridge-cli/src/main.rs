@@ -6,6 +6,14 @@
 use std::io::Read;
 use std::ops::RangeInclusive;
 use std::process::{Child, Command, Stdio};
+// 백그라운드 터널 detach는 Unix 전용(setsid/시그널) — 해당 심볼은 cfg(unix)로 격리해
+// Windows 워크스페이스 빌드를 깨지 않는다.
+#[cfg(unix)]
+use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
 use clap::Parser;
@@ -18,6 +26,7 @@ use portbridge_core::ssh_config::{resolve_host, ResolvedHost};
 use portbridge_core::tunnel::{self, ForwardSpec, TunnelProcess, TunnelSpawner};
 
 mod store;
+mod tunnels;
 
 // ── ProcessRunner: std::process::Command 기반 CommandRunner 구현 ──────────
 
@@ -131,18 +140,50 @@ enum Commands {
         json: bool,
     },
 
-    /// SSH 로컬 포트 포워딩(`ssh -L`)을 실행한다 (foreground; Ctrl-C로 종료)
+    /// SSH 로컬 포트 포워딩(`ssh -L`)을 실행·관리한다
     Tunnel {
+        #[command(subcommand)]
+        action: TunnelCmd,
+    },
+}
+
+#[derive(clap::Subcommand)]
+enum TunnelCmd {
+    /// 포그라운드로 실행한다 (Ctrl-C로 종료)
+    Run {
         /// SSH 접속 대상: `user@host`, 저장 서버 이름/id, 또는 `~/.ssh/config` Host alias
         target: String,
-
         /// 포워딩 스펙: `<local_port>:<remote_host>:<remote_port>`
         #[arg(short = 'L')]
         forward: String,
-
         /// SSH 포트 (미지정 시 저장 서버/alias의 Port, 그것도 없으면 22)
         #[arg(short, long)]
         port: Option<u16>,
+    },
+    /// 백그라운드로 시작한다 (detach; `tunnel ls`로 추적)
+    Start {
+        /// SSH 접속 대상: `user@host`, 저장 서버 이름/id, 또는 `~/.ssh/config` Host alias
+        target: String,
+        /// 포워딩 스펙: `<local_port>:<remote_host>:<remote_port>`
+        #[arg(short = 'L')]
+        forward: String,
+        /// SSH 포트 (미지정 시 저장 서버/alias의 Port, 그것도 없으면 22)
+        #[arg(short, long)]
+        port: Option<u16>,
+    },
+    /// 백그라운드 터널 목록 (죽은 항목은 DEAD 표시 후 정리)
+    Ls {
+        /// 머신리더블 JSON으로 출력
+        #[arg(long)]
+        json: bool,
+    },
+    /// 백그라운드 터널을 종료한다 (local_port 지정 또는 --all)
+    Stop {
+        /// 종료할 터널의 로컬 포트
+        local_port: Option<u16>,
+        /// 모든 백그라운드 터널 종료
+        #[arg(long, conflicts_with = "local_port")]
+        all: bool,
     },
 }
 
@@ -197,6 +238,15 @@ fn new_server_id() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     format!("srv-{nanos:x}")
+}
+
+/// 현재 unix epoch 초. 터널 started_at 기록용(core는 clockless 유지).
+#[cfg(unix)]
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// 서버를 저장한다. `(user,host,port)` 중복은 거부(Desktop `isDuplicate` 동치).
@@ -467,54 +517,264 @@ fn main() {
             }
         }
 
-        Commands::Tunnel {
-            target,
-            forward,
-            port,
-        } => {
-            let store = store::FileStore::new(store::config_dir());
-            let server = resolve_server(&store, &target, port).unwrap_or_else(|msg| {
-                eprintln!("error: {msg}");
-                std::process::exit(1);
-            });
-            let spec = parse_forward_spec(&forward).unwrap_or_else(|msg| {
-                eprintln!("error: {msg}");
-                std::process::exit(1);
-            });
-
-            // core가 단일 출처: argv 조립·spawn·early-death 감지(1500ms settle)를 위임한다.
-            let id = format!("{}:{}", spec.local_port, spec.remote_port);
-            match tunnel::start_forwarding(
-                &ProcessTunnelSpawner,
-                id,
-                &server,
-                &spec,
-                Duration::from_millis(1500),
-            ) {
-                Ok((forwarding, mut process)) => {
-                    println!(
-                        "tunnel {:?}: 127.0.0.1:{} → {}:{}  (Ctrl-C to stop)",
-                        forwarding.state,
-                        forwarding.local_port,
-                        spec.remote_host,
-                        forwarding.remote_port
-                    );
-                    // foreground: core 핸들엔 wait()가 없으므로 poll_exit로 종료까지 폴링한다.
-                    // Ctrl-C는 프로세스 그룹으로 ssh 자식에 전파된다(기존 동작 유지).
-                    while process.poll_exit().is_none() {
-                        std::thread::sleep(Duration::from_millis(200));
-                    }
-                }
-                Err(e) => {
-                    eprintln!("{e}");
-                    std::process::exit(1);
-                }
-            }
-        }
+        Commands::Tunnel { action } => match action {
+            TunnelCmd::Run {
+                target,
+                forward,
+                port,
+            } => tunnel_run(&target, &forward, port),
+            TunnelCmd::Start {
+                target,
+                forward,
+                port,
+            } => tunnel_start(&target, &forward, port),
+            TunnelCmd::Ls { json } => tunnel_ls_cmd(json),
+            TunnelCmd::Stop { local_port, all } => tunnel_stop_cmd(local_port, all),
+        },
     }
 }
 
 // ── tunnel ──────────────────────────────────────────────────────────────
+
+/// 포그라운드 터널: core가 argv 조립·spawn·early-death 감지(1500ms settle)를 위임받고,
+/// CLI는 poll_exit로 종료(또는 Ctrl-C)까지 폴링한다.
+fn tunnel_run(target: &str, forward: &str, port: Option<u16>) {
+    let store = store::FileStore::new(store::config_dir());
+    let server = resolve_server(&store, target, port).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+    let spec = parse_forward_spec(forward).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+
+    let id = format!("{}:{}", spec.local_port, spec.remote_port);
+    match tunnel::start_forwarding(
+        &ProcessTunnelSpawner,
+        id,
+        &server,
+        &spec,
+        Duration::from_millis(1500),
+    ) {
+        Ok((forwarding, mut process)) => {
+            println!(
+                "tunnel {:?}: 127.0.0.1:{} → {}:{}  (Ctrl-C to stop)",
+                forwarding.state, forwarding.local_port, spec.remote_host, forwarding.remote_port
+            );
+            while process.poll_exit().is_none() {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// 백그라운드 터널을 시작한다. 죽은 항목을 먼저 정리하고, 같은 local_port를 점유한
+/// 살아있는 터널이 있으면 거부한다. core start_forwarding(detach spawner, 1500ms settle)으로
+/// 조기사망을 감지한 뒤 레코드를 영속한다.
+///
+/// detach(setsid)·시그널 의존이라 Unix 전용. 비-Unix에서는 안내 후 종료한다.
+#[cfg(not(unix))]
+fn tunnel_start(_target: &str, _forward: &str, _port: Option<u16>) {
+    eprintln!("error: 백그라운드 터널(tunnel start)은 Unix(macOS/Linux) 전용입니다");
+    std::process::exit(1);
+}
+
+#[cfg(unix)]
+fn tunnel_start(target: &str, forward: &str, port: Option<u16>) {
+    let store = store::FileStore::new(store::config_dir());
+    let server = resolve_server(&store, target, port).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+    let spec = parse_forward_spec(forward).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+
+    // 죽은 항목 정리(#113) + local_port 충돌 검사.
+    let existing = tunnels::load(&store).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+    let (mut alive, _dead) = tunnels::partition_alive(existing, tunnels::is_alive);
+    if alive.iter().any(|r| r.local_port == spec.local_port) {
+        eprintln!(
+            "error: 로컬 포트 {}를 이미 사용하는 백그라운드 터널이 있습니다 (tunnel stop {} 먼저)",
+            spec.local_port, spec.local_port
+        );
+        std::process::exit(1);
+    }
+
+    let log_path = tunnels::log_path(&store::config_dir(), spec.local_port);
+    let spawner = DetachedTunnelSpawner {
+        log_path: log_path.clone(),
+    };
+    let id = format!("{}:{}", spec.local_port, spec.remote_port);
+    match tunnel::start_forwarding(&spawner, id, &server, &spec, Duration::from_millis(1500)) {
+        Ok((forwarding, process)) => {
+            let pid = process.pid();
+            // process(핸들) drop — unix Child drop은 kill/wait를 안 하므로 ssh는 생존한다.
+            drop(process);
+
+            alive.push(tunnels::TunnelRecord {
+                pid,
+                local_port: forwarding.local_port,
+                remote_host: spec.remote_host.clone(),
+                remote_port: forwarding.remote_port,
+                target: format!("{}@{}:{}", server.user, server.host, server.port),
+                started_at: now_secs(),
+            });
+            if let Err(msg) = tunnels::save(&store, &alive) {
+                eprintln!("error: {msg}");
+                std::process::exit(1);
+            }
+            println!(
+                "started pid={pid}  127.0.0.1:{} → {}:{}  (log: {})",
+                forwarding.local_port,
+                spec.remote_host,
+                forwarding.remote_port,
+                log_path.display()
+            );
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+/// `tunnel ls` 디스패치 — 실제 liveness(libc)와 FileStore를 묶는 I/O 경계.
+fn tunnel_ls_cmd(json: bool) {
+    let store = store::FileStore::new(store::config_dir());
+    match tunnel_ls(&store, tunnels::is_alive, json) {
+        Ok(out) => println!("{out}"),
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// ls 코어(주입형 liveness, 테스트 가능). alive/dead로 나눠 둘 다 출력하고,
+/// dead는 표시 후 정리해 **alive만** 다시 저장한다(저장은 json/table 무관).
+fn tunnel_ls(
+    p: &dyn portbridge_core::persistence::Persistence,
+    is_alive: impl Fn(u32) -> bool,
+    json: bool,
+) -> Result<String, String> {
+    let records = tunnels::load(p)?;
+    let (alive, dead) = tunnels::partition_alive(records, is_alive);
+    let out = if json {
+        tunnels_to_json(&alive, &dead)
+    } else {
+        format_tunnel_table(&alive, &dead)
+    };
+    tunnels::save(p, &alive)?; // dead 정리
+    Ok(out)
+}
+
+/// 터널을 STATUS / PID / LOCAL / TARGET / REMOTE 테이블로 포맷한다(순수).
+/// alive 먼저, 그다음 dead. 빈 입력도 헤더를 출력한다.
+fn format_tunnel_table(alive: &[tunnels::TunnelRecord], dead: &[tunnels::TunnelRecord]) -> String {
+    let rows: Vec<(&str, &tunnels::TunnelRecord)> = alive
+        .iter()
+        .map(|r| ("alive", r))
+        .chain(dead.iter().map(|r| ("dead", r)))
+        .collect();
+
+    let target_w = "TARGET"
+        .len()
+        .max(rows.iter().map(|(_, r)| r.target.len()).max().unwrap_or(0));
+
+    let mut out = format!(
+        "{:<6} {:<7} {:<6} {:<target_w$} REMOTE",
+        "STATUS", "PID", "LOCAL", "TARGET"
+    );
+    for (status, r) in rows {
+        out.push('\n');
+        out.push_str(&format!(
+            "{:<6} {:<7} {:<6} {:<target_w$} {}:{}",
+            status, r.pid, r.local_port, r.target, r.remote_host, r.remote_port
+        ));
+    }
+    out
+}
+
+/// 터널 목록을 JSON 배열로 직렬화한다(순수). 각 레코드를 serde_json Value로 만든 뒤
+/// `status` 필드를 주입한다(flatten 미사용 — 참조 flatten 컴파일 리스크 회피).
+fn tunnels_to_json(alive: &[tunnels::TunnelRecord], dead: &[tunnels::TunnelRecord]) -> String {
+    let mut arr: Vec<serde_json::Value> = Vec::new();
+    for (status, recs) in [("alive", alive), ("dead", dead)] {
+        for r in recs {
+            let mut v = serde_json::to_value(r).unwrap_or(serde_json::Value::Null);
+            if let serde_json::Value::Object(ref mut map) = v {
+                map.insert(
+                    "status".to_string(),
+                    serde_json::Value::String(status.to_string()),
+                );
+            }
+            arr.push(v);
+        }
+    }
+    serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string())
+}
+/// `tunnel stop` 디스패치 — 실제 liveness/kill(libc)과 FileStore를 묶는 I/O 경계.
+fn tunnel_stop_cmd(local_port: Option<u16>, all: bool) {
+    let store = store::FileStore::new(store::config_dir());
+    match tunnel_stop(
+        &store,
+        tunnels::is_alive,
+        tunnels::send_sigterm,
+        local_port,
+        all,
+    ) {
+        Ok(out) => println!("{out}"),
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// stop 코어(주입형 liveness/kill, 테스트 가능). dead는 항상 정리한다.
+/// `--all`이면 살아있는 전부에 SIGTERM 후 state를 비운다. 아니면 local_port 한 건.
+fn tunnel_stop(
+    p: &dyn portbridge_core::persistence::Persistence,
+    is_alive: impl Fn(u32) -> bool,
+    kill: impl Fn(u32) -> bool,
+    local_port: Option<u16>,
+    all: bool,
+) -> Result<String, String> {
+    let records = tunnels::load(p)?;
+    let (alive, _dead) = tunnels::partition_alive(records, is_alive);
+
+    if all {
+        let n = alive.len();
+        for r in &alive {
+            kill(r.pid);
+        }
+        tunnels::save(p, &[])?;
+        return Ok(format!("stopped {n} tunnel(s)"));
+    }
+
+    let port =
+        local_port.ok_or_else(|| "local_port 또는 --all 중 하나가 필요합니다".to_string())?;
+    let (remaining, removed) = tunnels::remove_by_local_port(alive, port);
+    match removed {
+        Some(r) => {
+            kill(r.pid);
+            tunnels::save(p, &remaining)?;
+            Ok(format!("stopped pid={} (local_port {})", r.pid, port))
+        }
+        None => Err(format!(
+            "로컬 포트 {port}의 살아있는 백그라운드 터널이 없습니다"
+        )),
+    }
+}
 
 /// `-L` 인자를 core [`ForwardSpec`]로 파싱한다(순수). 3-part 형식 검증과 remote_host
 /// 비어있음 거부는 CLI 책임(`-L <local_port>:<remote_host>:<remote_port>`).
@@ -620,6 +880,105 @@ impl TunnelSpawner for ProcessTunnelSpawner {
                 stderr: format!("spawn failed: {e}"),
             })?;
         Ok(Box::new(ChildTunnelProcess::new(child)))
+    }
+}
+
+// ── 백그라운드(detach) TunnelSpawner 구현 ─────────────────────────────────
+//
+// foreground와 달리 stderr를 부모 파이프가 아닌 **로그파일**로 보내고(부모 종료 후
+// EPIPE로 터널이 죽는 것을 막고 DEAD 사유를 보존), `setsid()`로 자식을 독립 session에
+// 두어 터미널 닫힘(SIGHUP)·Ctrl-C(SIGINT)로부터 격리한다. start_forwarding의 1500ms
+// settle 동안에만 부모가 try_wait로 조기사망을 감지하고, Ok 이후엔 핸들을 drop한다
+// (unix Child drop은 kill/wait를 하지 않으므로 ssh는 init으로 reparent돼 생존).
+
+/// detach된 ssh 자식의 핸들. 조기사망 시 로그파일 내용을 사유로 돌려준다.
+#[cfg(unix)]
+struct DetachedTunnelProcess {
+    child: Child,
+    pid: u32,
+    log_path: PathBuf,
+}
+
+#[cfg(unix)]
+impl TunnelProcess for DetachedTunnelProcess {
+    fn poll_exit(&mut self) -> Option<String> {
+        match self.child.try_wait() {
+            Ok(Some(_status)) => {
+                let reason = std::fs::read_to_string(&self.log_path)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
+                Some(reason)
+            }
+            Ok(None) => None,
+            Err(e) => Some(format!("try_wait failed: {e}")),
+        }
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        self.child.kill()?;
+        let _ = self.child.wait();
+        Ok(())
+    }
+
+    fn pid(&self) -> u32 {
+        self.pid
+    }
+}
+
+/// detach spawner. 생성 시 로그파일 경로를 받아 stderr를 그리로 보낸다.
+#[cfg(unix)]
+struct DetachedTunnelSpawner {
+    log_path: PathBuf,
+}
+
+#[cfg(unix)]
+impl TunnelSpawner for DetachedTunnelSpawner {
+    fn spawn(
+        &self,
+        executable: &str,
+        args: &[&str],
+    ) -> Result<Box<dyn TunnelProcess>, PortBridgeError> {
+        // 로그 디렉터리 보장 + append 오픈(부모가 열어 fd를 자식에 상속시킨다).
+        if let Some(parent) = self.log_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| PortBridgeError::ForwardingDiedEarly {
+                stderr: format!("log dir create failed: {e}"),
+            })?;
+        }
+        let log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.log_path)
+            .map_err(|e| PortBridgeError::ForwardingDiedEarly {
+                stderr: format!("log open failed: {e}"),
+            })?;
+
+        let mut cmd = Command::new(executable);
+        cmd.args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(log));
+
+        // SAFETY: pre_exec는 fork 후·exec 전 자식에서 실행된다. setsid는 단일
+        // async-signal-safe 시스템콜이다. 실패(이미 그룹 리더 — fork 직후엔 발생 안 함)는
+        // 무시한다(best-effort detach).
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+
+        let child = cmd
+            .spawn()
+            .map_err(|e| PortBridgeError::ForwardingDiedEarly {
+                stderr: format!("spawn failed: {e}"),
+            })?;
+        let pid = child.id();
+        Ok(Box::new(DetachedTunnelProcess {
+            child,
+            pid,
+            log_path: self.log_path.clone(),
+        }))
     }
 }
 
@@ -1326,6 +1685,70 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // ── tunnel ls ──────────────────────────────────────────────────────────
+
+    fn t_rec(pid: u32, local_port: u16) -> tunnels::TunnelRecord {
+        tunnels::TunnelRecord {
+            pid,
+            local_port,
+            remote_host: "localhost".into(),
+            remote_port: 5432,
+            target: "deploy@10.0.0.1:22".into(),
+            started_at: 1_700_000_000,
+        }
+    }
+
+    /// ls는 dead를 표시하고 저장에서는 정리한다(alive만 남는다).
+    #[test]
+    fn tunnel_ls_shows_dead_then_prunes() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_tun_ls_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+
+        tunnels::save(&p, &[t_rec(1, 8080), t_rec(2, 9090)]).unwrap();
+        // pid 2는 죽음
+        let out = tunnel_ls(&p, |pid| pid != 2, false).unwrap();
+        assert!(out.contains("alive") && out.contains("8080"));
+        assert!(out.contains("dead") && out.contains("9090"));
+
+        // 저장본은 alive만
+        let after = tunnels::load(&p).unwrap();
+        assert_eq!(after.iter().map(|r| r.pid).collect::<Vec<_>>(), vec![1]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// JSON 출력은 status 필드를 포함하고 alive/dead를 모두 담는다.
+    #[test]
+    fn tunnel_ls_json_includes_status() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("pb_cli_tun_json_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+
+        tunnels::save(&p, &[t_rec(1, 8080)]).unwrap();
+        let out = tunnel_ls(&p, |_| true, true).unwrap();
+        assert!(out.contains("\"status\":\"alive\""));
+        assert!(out.contains("\"pid\":1"));
+        assert!(out.contains("\"local_port\":8080"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 빈 목록도 헤더를 출력한다.
+    #[test]
+    fn format_tunnel_table_empty_has_header() {
+        let out = format_tunnel_table(&[], &[]);
+        assert!(out.starts_with("STATUS"));
+        assert_eq!(out.lines().count(), 1);
+    }
+
     // ── favorite CRUD ───────────────────────────────────────────────────────
 
     /// 즐겨찾기 테이블: server_id를 서버명으로 lookup, 삭제된 서버는 `<id> (?)`.
@@ -1390,6 +1813,91 @@ mod tests {
         favorite_rm(&p, "prod", 5432).unwrap();
         assert_eq!(store::load_favorites(&p).unwrap().len(), 1);
         assert!(favorite_rm(&p, "prod", 5432).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── tunnel stop ────────────────────────────────────────────────────────
+
+    /// stop <port>: 해당 포트에 kill 호출 + 레코드 제거, 나머지 보존.
+    #[test]
+    fn tunnel_stop_one_kills_and_removes() {
+        use std::cell::RefCell;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("pb_cli_tun_stop_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+        tunnels::save(&p, &[t_rec(11, 8080), t_rec(22, 9090)]).unwrap();
+
+        let killed = RefCell::new(Vec::new());
+        let out = tunnel_stop(
+            &p,
+            |_| true,
+            |pid| {
+                killed.borrow_mut().push(pid);
+                true
+            },
+            Some(8080),
+            false,
+        )
+        .unwrap();
+        assert!(out.contains("8080"));
+        assert_eq!(*killed.borrow(), vec![11]);
+        let after = tunnels::load(&p).unwrap();
+        assert_eq!(
+            after.iter().map(|r| r.local_port).collect::<Vec<_>>(),
+            vec![9090]
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// stop --all: 살아있는 전부 kill + state 비움.
+    #[test]
+    fn tunnel_stop_all_clears() {
+        use std::cell::RefCell;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_tun_all_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+        tunnels::save(&p, &[t_rec(11, 8080), t_rec(22, 9090)]).unwrap();
+
+        let killed = RefCell::new(Vec::new());
+        tunnel_stop(
+            &p,
+            |_| true,
+            |pid| {
+                killed.borrow_mut().push(pid);
+                true
+            },
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(*killed.borrow(), vec![11, 22]);
+        assert_eq!(tunnels::load(&p).unwrap(), vec![]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// stop <부재 포트>: 에러.
+    #[test]
+    fn tunnel_stop_absent_is_error() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("pb_cli_tun_absent_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+        tunnels::save(&p, &[t_rec(11, 8080)]).unwrap();
+
+        assert!(tunnel_stop(&p, |_| true, |_| true, Some(9999), false).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
