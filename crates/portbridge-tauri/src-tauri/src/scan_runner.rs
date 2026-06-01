@@ -77,7 +77,10 @@ mod tests {
 
     // 실제 프로세스 경로 — 로컬 셸 도구로 러너 계약(exit/stdout/stderr/timeout)을 검증한다.
     // ssh 자체가 아니라 CommandRunner 구현의 동작을 본다(ssh 통합은 S5).
+    // /bin/sh 의존 테스트는 #[cfg(unix)]로 한정(Windows 비이식). launch-failure는
+    // 존재하지 않는 바이너리라 OS 무관 → 게이트하지 않는다.
 
+    #[cfg(unix)]
     #[test]
     fn run_captures_stdout_and_exit_zero() {
         let r = ProcessRunner
@@ -87,6 +90,7 @@ mod tests {
         assert_eq!(r.stdout, "hello");
     }
 
+    #[cfg(unix)]
     #[test]
     fn run_captures_stderr_and_nonzero_exit() {
         let r = ProcessRunner
@@ -100,6 +104,7 @@ mod tests {
         assert_eq!(r.stderr, "oops");
     }
 
+    #[cfg(unix)]
     #[test]
     fn run_times_out_and_kills_child() {
         let err = ProcessRunner
