@@ -632,8 +632,83 @@ fn tunnel_start(target: &str, forward: &str, port: Option<u16>) {
         }
     }
 }
-fn tunnel_ls_cmd(_json: bool) {
-    unimplemented!("Task 6")
+/// `tunnel ls` 디스패치 — 실제 liveness(libc)와 FileStore를 묶는 I/O 경계.
+fn tunnel_ls_cmd(json: bool) {
+    let store = store::FileStore::new(store::config_dir());
+    match tunnel_ls(&store, tunnels::is_alive, json) {
+        Ok(out) => println!("{out}"),
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// ls 코어(주입형 liveness, 테스트 가능). alive/dead로 나눠 둘 다 출력하고,
+/// dead는 표시 후 정리해 **alive만** 다시 저장한다(저장은 json/table 무관).
+fn tunnel_ls(
+    p: &dyn portbridge_core::persistence::Persistence,
+    is_alive: impl Fn(u32) -> bool,
+    json: bool,
+) -> Result<String, String> {
+    let records = tunnels::load(p)?;
+    let (alive, dead) = tunnels::partition_alive(records, is_alive);
+    let out = if json {
+        tunnels_to_json(&alive, &dead)
+    } else {
+        format_tunnel_table(&alive, &dead)
+    };
+    tunnels::save(p, &alive)?; // dead 정리
+    Ok(out)
+}
+
+/// 터널을 STATUS / PID / LOCAL / TARGET / REMOTE 테이블로 포맷한다(순수).
+/// alive 먼저, 그다음 dead. 빈 입력도 헤더를 출력한다.
+fn format_tunnel_table(
+    alive: &[tunnels::TunnelRecord],
+    dead: &[tunnels::TunnelRecord],
+) -> String {
+    let rows: Vec<(&str, &tunnels::TunnelRecord)> = alive
+        .iter()
+        .map(|r| ("alive", r))
+        .chain(dead.iter().map(|r| ("dead", r)))
+        .collect();
+
+    let target_w = "TARGET"
+        .len()
+        .max(rows.iter().map(|(_, r)| r.target.len()).max().unwrap_or(0));
+
+    let mut out = format!(
+        "{:<6} {:<7} {:<6} {:<target_w$} REMOTE",
+        "STATUS", "PID", "LOCAL", "TARGET"
+    );
+    for (status, r) in rows {
+        out.push('\n');
+        out.push_str(&format!(
+            "{:<6} {:<7} {:<6} {:<target_w$} {}:{}",
+            status, r.pid, r.local_port, r.target, r.remote_host, r.remote_port
+        ));
+    }
+    out
+}
+
+/// 터널 목록을 JSON 배열로 직렬화한다(순수). 각 레코드를 serde_json Value로 만든 뒤
+/// `status` 필드를 주입한다(flatten 미사용 — 참조 flatten 컴파일 리스크 회피).
+fn tunnels_to_json(
+    alive: &[tunnels::TunnelRecord],
+    dead: &[tunnels::TunnelRecord],
+) -> String {
+    let mut arr: Vec<serde_json::Value> = Vec::new();
+    for (status, recs) in [("alive", alive), ("dead", dead)] {
+        for r in recs {
+            let mut v = serde_json::to_value(r).unwrap_or(serde_json::Value::Null);
+            if let serde_json::Value::Object(ref mut map) = v {
+                map.insert("status".to_string(), serde_json::Value::String(status.to_string()));
+            }
+            arr.push(v);
+        }
+    }
+    serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string())
 }
 fn tunnel_stop_cmd(_local_port: Option<u16>, _all: bool) {
     unimplemented!("Task 7")
@@ -1540,6 +1615,69 @@ mod tests {
         assert!(server_rm(&p, "prod").is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── tunnel ls ──────────────────────────────────────────────────────────
+
+    fn t_rec(pid: u32, local_port: u16) -> tunnels::TunnelRecord {
+        tunnels::TunnelRecord {
+            pid,
+            local_port,
+            remote_host: "localhost".into(),
+            remote_port: 5432,
+            target: "deploy@10.0.0.1:22".into(),
+            started_at: 1_700_000_000,
+        }
+    }
+
+    /// ls는 dead를 표시하고 저장에서는 정리한다(alive만 남는다).
+    #[test]
+    fn tunnel_ls_shows_dead_then_prunes() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_tun_ls_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+
+        tunnels::save(&p, &[t_rec(1, 8080), t_rec(2, 9090)]).unwrap();
+        // pid 2는 죽음
+        let out = tunnel_ls(&p, |pid| pid != 2, false).unwrap();
+        assert!(out.contains("alive") && out.contains("8080"));
+        assert!(out.contains("dead") && out.contains("9090"));
+
+        // 저장본은 alive만
+        let after = tunnels::load(&p).unwrap();
+        assert_eq!(after.iter().map(|r| r.pid).collect::<Vec<_>>(), vec![1]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// JSON 출력은 status 필드를 포함하고 alive/dead를 모두 담는다.
+    #[test]
+    fn tunnel_ls_json_includes_status() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_tun_json_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+
+        tunnels::save(&p, &[t_rec(1, 8080)]).unwrap();
+        let out = tunnel_ls(&p, |_| true, true).unwrap();
+        assert!(out.contains("\"status\":\"alive\""));
+        assert!(out.contains("\"pid\":1"));
+        assert!(out.contains("\"localPort\":8080") || out.contains("\"local_port\":8080"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 빈 목록도 헤더를 출력한다.
+    #[test]
+    fn format_tunnel_table_empty_has_header() {
+        let out = format_tunnel_table(&[], &[]);
+        assert!(out.starts_with("STATUS"));
+        assert_eq!(out.lines().count(), 1);
     }
 
     // ── favorite CRUD ───────────────────────────────────────────────────────
