@@ -14,4 +14,7 @@ portbridge-core = { path = "../portbridge-core" }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# 백그라운드 터널 detach(setsid)·liveness/SIGTERM은 Unix 전용 — libc도 Unix에서만 끌어온다.
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"

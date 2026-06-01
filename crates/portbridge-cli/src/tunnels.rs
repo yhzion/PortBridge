@@ -81,15 +81,29 @@ pub fn log_path(config_dir: &Path, local_port: u16) -> PathBuf {
 // ── libc 래퍼 (unix) ──────────────────────────────────────────────────────
 
 /// PID가 살아있는지 `kill(pid, 0)`으로 확인한다(시그널 미전송 존재 검사).
+#[cfg(unix)]
 pub fn is_alive(pid: u32) -> bool {
     // SAFETY: kill(_, 0)은 시그널을 보내지 않고 프로세스 존재·권한만 검사한다.
     unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
 }
 
+/// 비-Unix 스텁 — 백그라운드 터널은 Unix 전용이라 비-Unix에선 실제 호출되지 않는다.
+#[cfg(not(unix))]
+pub fn is_alive(_pid: u32) -> bool {
+    false
+}
+
 /// PID에 SIGTERM을 보낸다. 성공(또는 이미 종료) 시 true.
+#[cfg(unix)]
 pub fn send_sigterm(pid: u32) -> bool {
     // SAFETY: 단일 kill 호출. 대상은 우리가 띄운 ssh 자식.
     unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
+}
+
+/// 비-Unix 스텁 — 백그라운드 터널은 Unix 전용이라 비-Unix에선 실제 호출되지 않는다.
+#[cfg(not(unix))]
+pub fn send_sigterm(_pid: u32) -> bool {
+    false
 }
 
 #[cfg(test)]

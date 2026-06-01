@@ -3,12 +3,17 @@
 //! 프로세스 실행·인자 파싱·출력 포매팅만 담당하는 얇은 어댑터.
 //! 모든 로직(파싱, 에러 분류, 중복 제거, 필터링)은 core에 위임한다.
 
-use std::fs::OpenOptions;
 use std::io::Read;
 use std::ops::RangeInclusive;
-use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+// 백그라운드 터널 detach는 Unix 전용(setsid/시그널) — 해당 심볼은 cfg(unix)로 격리해
+// Windows 워크스페이스 빌드를 깨지 않는다.
+#[cfg(unix)]
+use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
 use clap::Parser;
@@ -236,6 +241,7 @@ fn new_server_id() -> String {
 }
 
 /// 현재 unix epoch 초. 터널 started_at 기록용(core는 clockless 유지).
+#[cfg(unix)]
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -570,6 +576,15 @@ fn tunnel_run(target: &str, forward: &str, port: Option<u16>) {
 /// 백그라운드 터널을 시작한다. 죽은 항목을 먼저 정리하고, 같은 local_port를 점유한
 /// 살아있는 터널이 있으면 거부한다. core start_forwarding(detach spawner, 1500ms settle)으로
 /// 조기사망을 감지한 뒤 레코드를 영속한다.
+///
+/// detach(setsid)·시그널 의존이라 Unix 전용. 비-Unix에서는 안내 후 종료한다.
+#[cfg(not(unix))]
+fn tunnel_start(_target: &str, _forward: &str, _port: Option<u16>) {
+    eprintln!("error: 백그라운드 터널(tunnel start)은 Unix(macOS/Linux) 전용입니다");
+    std::process::exit(1);
+}
+
+#[cfg(unix)]
 fn tunnel_start(target: &str, forward: &str, port: Option<u16>) {
     let store = store::FileStore::new(store::config_dir());
     let server = resolve_server(&store, target, port).unwrap_or_else(|msg| {
@@ -872,12 +887,14 @@ impl TunnelSpawner for ProcessTunnelSpawner {
 // (unix Child drop은 kill/wait를 하지 않으므로 ssh는 init으로 reparent돼 생존).
 
 /// detach된 ssh 자식의 핸들. 조기사망 시 로그파일 내용을 사유로 돌려준다.
+#[cfg(unix)]
 struct DetachedTunnelProcess {
     child: Child,
     pid: u32,
     log_path: PathBuf,
 }
 
+#[cfg(unix)]
 impl TunnelProcess for DetachedTunnelProcess {
     fn poll_exit(&mut self) -> Option<String> {
         match self.child.try_wait() {
@@ -904,10 +921,12 @@ impl TunnelProcess for DetachedTunnelProcess {
 }
 
 /// detach spawner. 생성 시 로그파일 경로를 받아 stderr를 그리로 보낸다.
+#[cfg(unix)]
 struct DetachedTunnelSpawner {
     log_path: PathBuf,
 }
 
+#[cfg(unix)]
 impl TunnelSpawner for DetachedTunnelSpawner {
     fn spawn(
         &self,
