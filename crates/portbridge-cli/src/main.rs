@@ -710,8 +710,50 @@ fn tunnels_to_json(
     }
     serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string())
 }
-fn tunnel_stop_cmd(_local_port: Option<u16>, _all: bool) {
-    unimplemented!("Task 7")
+/// `tunnel stop` 디스패치 — 실제 liveness/kill(libc)과 FileStore를 묶는 I/O 경계.
+fn tunnel_stop_cmd(local_port: Option<u16>, all: bool) {
+    let store = store::FileStore::new(store::config_dir());
+    match tunnel_stop(&store, tunnels::is_alive, tunnels::send_sigterm, local_port, all) {
+        Ok(out) => println!("{out}"),
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// stop 코어(주입형 liveness/kill, 테스트 가능). dead는 항상 정리한다.
+/// `--all`이면 살아있는 전부에 SIGTERM 후 state를 비운다. 아니면 local_port 한 건.
+fn tunnel_stop(
+    p: &dyn portbridge_core::persistence::Persistence,
+    is_alive: impl Fn(u32) -> bool,
+    kill: impl Fn(u32) -> bool,
+    local_port: Option<u16>,
+    all: bool,
+) -> Result<String, String> {
+    let records = tunnels::load(p)?;
+    let (alive, _dead) = tunnels::partition_alive(records, is_alive);
+
+    if all {
+        let n = alive.len();
+        for r in &alive {
+            kill(r.pid);
+        }
+        tunnels::save(p, &[])?;
+        return Ok(format!("stopped {n} tunnel(s)"));
+    }
+
+    let port = local_port
+        .ok_or_else(|| "local_port 또는 --all 중 하나가 필요합니다".to_string())?;
+    let (remaining, removed) = tunnels::remove_by_local_port(alive, port);
+    match removed {
+        Some(r) => {
+            kill(r.pid);
+            tunnels::save(p, &remaining)?;
+            Ok(format!("stopped pid={} (local_port {})", r.pid, port))
+        }
+        None => Err(format!("로컬 포트 {port}의 살아있는 백그라운드 터널이 없습니다")),
+    }
 }
 
 /// `-L` 인자를 core [`ForwardSpec`]로 파싱한다(순수). 3-part 형식 검증과 remote_host
@@ -1744,6 +1786,76 @@ mod tests {
         favorite_rm(&p, "prod", 5432).unwrap();
         assert_eq!(store::load_favorites(&p).unwrap().len(), 1);
         assert!(favorite_rm(&p, "prod", 5432).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── tunnel stop ────────────────────────────────────────────────────────
+
+    /// stop <port>: 해당 포트에 kill 호출 + 레코드 제거, 나머지 보존.
+    #[test]
+    fn tunnel_stop_one_kills_and_removes() {
+        use std::cell::RefCell;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_tun_stop_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+        tunnels::save(&p, &[t_rec(11, 8080), t_rec(22, 9090)]).unwrap();
+
+        let killed = RefCell::new(Vec::new());
+        let out = tunnel_stop(
+            &p,
+            |_| true,
+            |pid| {
+                killed.borrow_mut().push(pid);
+                true
+            },
+            Some(8080),
+            false,
+        )
+        .unwrap();
+        assert!(out.contains("8080"));
+        assert_eq!(*killed.borrow(), vec![11]);
+        let after = tunnels::load(&p).unwrap();
+        assert_eq!(after.iter().map(|r| r.local_port).collect::<Vec<_>>(), vec![9090]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// stop --all: 살아있는 전부 kill + state 비움.
+    #[test]
+    fn tunnel_stop_all_clears() {
+        use std::cell::RefCell;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_tun_all_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+        tunnels::save(&p, &[t_rec(11, 8080), t_rec(22, 9090)]).unwrap();
+
+        let killed = RefCell::new(Vec::new());
+        tunnel_stop(&p, |_| true, |pid| { killed.borrow_mut().push(pid); true }, None, true).unwrap();
+        assert_eq!(*killed.borrow(), vec![11, 22]);
+        assert_eq!(tunnels::load(&p).unwrap(), vec![]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// stop <부재 포트>: 에러.
+    #[test]
+    fn tunnel_stop_absent_is_error() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("pb_cli_tun_absent_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = store::FileStore::new(dir.clone());
+        tunnels::save(&p, &[t_rec(11, 8080)]).unwrap();
+
+        assert!(tunnel_stop(&p, |_| true, |_| true, Some(9999), false).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
