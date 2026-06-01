@@ -9,17 +9,18 @@
 // - 동적 active 트레이 아이콘(에셋 2종), 정밀 팝오버 위치, dock 정책, 업데이트 체크(코드사이닝/HTTP).
 
 mod commands;
+mod native_policy;
 mod scan_runner;
 mod store;
 mod tunnel_runtime;
 
 use commands::AppState;
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
-use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -37,10 +38,43 @@ pub fn run() {
         ))
         .manage(AppState::default())
         .setup(|app| {
-            // 트레이 메뉴(우클릭): 열기 / 종료.
+            // autostart 실제 등록 상태(플러그인이 SSOT) — 메뉴 체크 초기값.
+            let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
+            // 저장된 dock 정책(macOS 전용) — 메뉴 체크 초기값 + 시작 시 적용.
+            #[cfg(target_os = "macos")]
+            let prefs =
+                crate::store::load_prefs(&commands::open_store(app.handle())).unwrap_or_default();
+
+            // 트레이 메뉴(우클릭): 열기 / [Dock에 표시(macOS)] / 로그인 시 실행 / 종료.
             let show_item = MenuItem::with_id(app, "show", "열기", true, None::<&str>)?;
+            let login_item = CheckMenuItem::with_id(
+                app,
+                "toggle_login",
+                "로그인 시 실행",
+                true,
+                autostart_on,
+                None::<&str>,
+            )?;
             let quit_item = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            #[cfg(target_os = "macos")]
+            let dock_item = CheckMenuItem::with_id(
+                app,
+                "toggle_dock",
+                "Dock에 표시",
+                true,
+                prefs.show_in_dock,
+                None::<&str>,
+            )?;
+
+            #[cfg(target_os = "macos")]
+            let menu = Menu::with_items(app, &[&show_item, &dock_item, &login_item, &quit_item])?;
+            #[cfg(not(target_os = "macos"))]
+            let menu = Menu::with_items(app, &[&show_item, &login_item, &quit_item])?;
+
+            // 핸들러에서 체크 상태를 갱신하려면 항목 핸들 클론을 캡처(CheckMenuItem은 Clone).
+            let login_h = login_item.clone();
+            #[cfg(target_os = "macos")]
+            let dock_h = dock_item.clone();
 
             TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().expect("default icon").clone())
@@ -48,12 +82,38 @@ pub fn run() {
                 .tooltip("PortBridge")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .on_menu_event(move |app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                    }
+                    // 로그인 시 실행 토글: 플러그인 enable/disable → prefs 반영 → 체크 갱신.
+                    "toggle_login" => {
+                        let mgr = app.autolaunch();
+                        let currently = mgr.is_enabled().unwrap_or(false);
+                        let _ = if currently {
+                            mgr.disable()
+                        } else {
+                            mgr.enable()
+                        };
+                        let now = mgr.is_enabled().unwrap_or(!currently);
+                        let store = commands::open_store(app);
+                        let mut prefs = crate::store::load_prefs(&store).unwrap_or_default();
+                        prefs.launch_at_login = now;
+                        let _ = crate::store::save_prefs(&store, &prefs);
+                        let _ = login_h.set_checked(now);
+                    }
+                    // Dock 표시 토글(macOS): prefs 반전 → 정책 적용 → 체크 갱신.
+                    #[cfg(target_os = "macos")]
+                    "toggle_dock" => {
+                        let store = commands::open_store(app);
+                        let mut prefs = crate::store::load_prefs(&store).unwrap_or_default();
+                        prefs.show_in_dock = !prefs.show_in_dock;
+                        let _ = crate::store::save_prefs(&store, &prefs);
+                        crate::native_policy::apply_dock_policy(app, prefs.show_in_dock);
+                        let _ = dock_h.set_checked(prefs.show_in_dock);
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -78,6 +138,12 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // 시작 시 저장된 dock 정책 적용(macOS).
+            #[cfg(target_os = "macos")]
+            crate::native_policy::apply_dock_policy(app.handle(), prefs.show_in_dock);
+            // 초기 트레이 아이콘 = idle 글리프(이후 forwarding 상태에 따라 교체).
+            crate::native_policy::update_tray_icon(app.handle(), false);
 
             // 메인 윈도우를 팝오버로: 시작 시 숨김 + blur(포커스 잃음) 시 자동 숨김.
             if let Some(window) = app.get_webview_window("main") {

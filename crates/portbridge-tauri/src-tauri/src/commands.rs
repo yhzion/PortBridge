@@ -133,7 +133,8 @@ fn default_remote_host() -> String {
 // ── 저장소 헬퍼: AppHandle → FileStore ────────────────────────────────────
 
 /// app-config dir 하위에 FileStore를 연다. 경로 해석 실패 시 폴백 디렉터리.
-fn open_store(app: &AppHandle) -> FileStore {
+/// (트레이 메뉴 핸들러(lib.rs)도 prefs를 읽고 써야 해 `pub(crate)`.)
+pub(crate) fn open_store(app: &AppHandle) -> FileStore {
     let dir = app
         .path()
         .app_config_dir()
@@ -211,9 +212,18 @@ pub fn prefs_save(
 
 // 포워딩 ─────────────────────────────────────────────────────────────────────
 
+/// 레지스트리 상태에서 active 여부를 파생해 트레이 아이콘을 갱신한다(#133).
+/// 잠금 실패 시 아이콘 갱신만 건너뛴다(기능 동작에 영향 없음).
+fn refresh_tray_icon(app: &AppHandle, state: &State<AppState>) {
+    if let Ok(reg) = state.tunnels.lock() {
+        crate::native_policy::update_tray_icon(app, crate::native_policy::any_active(&reg.list()));
+    }
+}
+
 /// 터널을 시작한다. settle 동안 살아남으면 활성 레지스트리에 등록하고 메타를 반환.
 #[tauri::command]
 pub fn forwarding_start(
+    app: AppHandle,
     state: State<AppState>,
     server: Server,
     spec: ForwardSpecDto,
@@ -230,18 +240,20 @@ pub fn forwarding_start(
 
     let dto = ForwardingDto::from(forwarding.clone());
     register_or_kill(&state.tunnels, forwarding, process)?;
+    refresh_tray_icon(&app, &state);
     Ok(dto)
 }
 
 /// id의 터널을 종료한다. 없으면 에러.
 #[tauri::command]
-pub fn forwarding_stop(state: State<AppState>, id: String) -> Result<(), String> {
+pub fn forwarding_stop(app: AppHandle, state: State<AppState>, id: String) -> Result<(), String> {
     let removed = state
         .tunnels
         .lock()
         .map_err(|_| "터널 레지스트리 잠금 실패".to_string())?
         .stop(&id);
     if removed {
+        refresh_tray_icon(&app, &state);
         Ok(())
     } else {
         Err(format!("활성 터널 없음: {id}"))
