@@ -132,18 +132,50 @@ enum Commands {
         json: bool,
     },
 
-    /// SSH 로컬 포트 포워딩(`ssh -L`)을 실행한다 (foreground; Ctrl-C로 종료)
+    /// SSH 로컬 포트 포워딩(`ssh -L`)을 실행·관리한다
     Tunnel {
+        #[command(subcommand)]
+        action: TunnelCmd,
+    },
+}
+
+#[derive(clap::Subcommand)]
+enum TunnelCmd {
+    /// 포그라운드로 실행한다 (Ctrl-C로 종료)
+    Run {
         /// SSH 접속 대상: `user@host`, 저장 서버 이름/id, 또는 `~/.ssh/config` Host alias
         target: String,
-
         /// 포워딩 스펙: `<local_port>:<remote_host>:<remote_port>`
         #[arg(short = 'L')]
         forward: String,
-
         /// SSH 포트 (미지정 시 저장 서버/alias의 Port, 그것도 없으면 22)
         #[arg(short, long)]
         port: Option<u16>,
+    },
+    /// 백그라운드로 시작한다 (detach; `tunnel ls`로 추적)
+    Start {
+        /// SSH 접속 대상: `user@host`, 저장 서버 이름/id, 또는 `~/.ssh/config` Host alias
+        target: String,
+        /// 포워딩 스펙: `<local_port>:<remote_host>:<remote_port>`
+        #[arg(short = 'L')]
+        forward: String,
+        /// SSH 포트 (미지정 시 저장 서버/alias의 Port, 그것도 없으면 22)
+        #[arg(short, long)]
+        port: Option<u16>,
+    },
+    /// 백그라운드 터널 목록 (죽은 항목은 DEAD 표시 후 정리)
+    Ls {
+        /// 머신리더블 JSON으로 출력
+        #[arg(long)]
+        json: bool,
+    },
+    /// 백그라운드 터널을 종료한다 (local_port 지정 또는 --all)
+    Stop {
+        /// 종료할 터널의 로컬 포트
+        local_port: Option<u16>,
+        /// 모든 백그라운드 터널 종료
+        #[arg(long)]
+        all: bool,
     },
 }
 
@@ -468,54 +500,71 @@ fn main() {
             }
         }
 
-        Commands::Tunnel {
-            target,
-            forward,
-            port,
-        } => {
-            let store = store::FileStore::new(store::config_dir());
-            let server = resolve_server(&store, &target, port).unwrap_or_else(|msg| {
-                eprintln!("error: {msg}");
-                std::process::exit(1);
-            });
-            let spec = parse_forward_spec(&forward).unwrap_or_else(|msg| {
-                eprintln!("error: {msg}");
-                std::process::exit(1);
-            });
-
-            // core가 단일 출처: argv 조립·spawn·early-death 감지(1500ms settle)를 위임한다.
-            let id = format!("{}:{}", spec.local_port, spec.remote_port);
-            match tunnel::start_forwarding(
-                &ProcessTunnelSpawner,
-                id,
-                &server,
-                &spec,
-                Duration::from_millis(1500),
-            ) {
-                Ok((forwarding, mut process)) => {
-                    println!(
-                        "tunnel {:?}: 127.0.0.1:{} → {}:{}  (Ctrl-C to stop)",
-                        forwarding.state,
-                        forwarding.local_port,
-                        spec.remote_host,
-                        forwarding.remote_port
-                    );
-                    // foreground: core 핸들엔 wait()가 없으므로 poll_exit로 종료까지 폴링한다.
-                    // Ctrl-C는 프로세스 그룹으로 ssh 자식에 전파된다(기존 동작 유지).
-                    while process.poll_exit().is_none() {
-                        std::thread::sleep(Duration::from_millis(200));
-                    }
-                }
-                Err(e) => {
-                    eprintln!("{e}");
-                    std::process::exit(1);
-                }
-            }
-        }
+        Commands::Tunnel { action } => match action {
+            TunnelCmd::Run {
+                target,
+                forward,
+                port,
+            } => tunnel_run(&target, &forward, port),
+            TunnelCmd::Start {
+                target,
+                forward,
+                port,
+            } => tunnel_start(&target, &forward, port),
+            TunnelCmd::Ls { json } => tunnel_ls_cmd(json),
+            TunnelCmd::Stop { local_port, all } => tunnel_stop_cmd(local_port, all),
+        },
     }
 }
 
 // ── tunnel ──────────────────────────────────────────────────────────────
+
+/// 포그라운드 터널: core가 argv 조립·spawn·early-death 감지(1500ms settle)를 위임받고,
+/// CLI는 poll_exit로 종료(또는 Ctrl-C)까지 폴링한다.
+fn tunnel_run(target: &str, forward: &str, port: Option<u16>) {
+    let store = store::FileStore::new(store::config_dir());
+    let server = resolve_server(&store, target, port).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+    let spec = parse_forward_spec(forward).unwrap_or_else(|msg| {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    });
+
+    let id = format!("{}:{}", spec.local_port, spec.remote_port);
+    match tunnel::start_forwarding(
+        &ProcessTunnelSpawner,
+        id,
+        &server,
+        &spec,
+        Duration::from_millis(1500),
+    ) {
+        Ok((forwarding, mut process)) => {
+            println!(
+                "tunnel {:?}: 127.0.0.1:{} → {}:{}  (Ctrl-C to stop)",
+                forwarding.state, forwarding.local_port, spec.remote_host, forwarding.remote_port
+            );
+            while process.poll_exit().is_none() {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn tunnel_start(_target: &str, _forward: &str, _port: Option<u16>) {
+    unimplemented!("Task 5")
+}
+fn tunnel_ls_cmd(_json: bool) {
+    unimplemented!("Task 6")
+}
+fn tunnel_stop_cmd(_local_port: Option<u16>, _all: bool) {
+    unimplemented!("Task 7")
+}
 
 /// `-L` 인자를 core [`ForwardSpec`]로 파싱한다(순수). 3-part 형식 검증과 remote_host
 /// 비어있음 거부는 CLI 책임(`-L <local_port>:<remote_host>:<remote_port>`).
