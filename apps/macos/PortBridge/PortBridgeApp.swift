@@ -29,7 +29,7 @@ private struct MainContentHost: View {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let viewModel: AppViewModel
     private var menuBarController: MenuBarController?
     private var mainWindow: NSWindow?
@@ -96,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setContentSize(NSSize(width: 900, height: 600))
             window.center()
             window.isReleasedWhenClosed = false
+            window.delegate = self
             mainWindow = window
         }
         if #available(macOS 14.0, *) {
@@ -107,7 +108,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        !AppSingleInstance.activateCurrentInstance()
+        if flag { return true }
+        showMainWindow()
+        return false
+    }
+
+    // MARK: - NSWindowDelegate
+
+    /// 닫기 버튼을 hide로 치환합니다. NSWindow 객체는 유지되어
+    /// 이후 `showMainWindow()` 호출 시 `makeKeyAndOrderFront`가 즉시 동작합니다.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
