@@ -67,8 +67,7 @@ struct UpdatePresenter: UpdatePresenting {
 
     @discardableResult
     private func runModal(_ alert: NSAlert) -> NSApplication.ModalResponse {
-        NSApp.activate(ignoringOtherApps: true)
-        return alert.runModal()
+        AppActivation.runModal(alert)
     }
 
     private func informativeText(for release: ReleaseInfo) -> String {
