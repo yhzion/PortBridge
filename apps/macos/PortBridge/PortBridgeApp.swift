@@ -42,7 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        PBDiag.reset("LAUNCH build=DIAG1 args=\(ProcessInfo.processInfo.arguments) policy=\(NSApp.activationPolicy().rawValue)")
         // 메뉴바 아이콘 + 좌/우클릭 핸들러 설치.
         // showMainWindow는 클로저로 직접 주입한다. `NSApp.delegate as? AppDelegate`
         // 캐스트는 Debug dylib 분리 등으로 타입 정체성이 어긋나 nil이 될 수 있어 사용하지 않는다.
@@ -73,8 +72,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if Self.shouldOpenMainWindowOnLaunch {
             showMainWindow()
         }
-        PBDiag.dumpWindows("didFinishLaunching")
-        RunLoop.current.perform(inModes: [.default]) { PBDiag.dumpWindows("post-launch-runloop") }
     }
 
     /// 메인 윈도우를 표시합니다. 처음 호출 시 AppKit NSWindow를 만들고 ContentView를
@@ -85,8 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// AppKit으로 직접 호스팅합니다. 사용자가 메뉴바를 통해 호출(user gesture)하므로
     /// `NSApp.activate()`가 정상 동작합니다.
     func showMainWindow() {
-        PBDiag.log("showMainWindow ENTER mainWindowNil=\(mainWindow == nil) isActive=\(NSApp.isActive) policy=\(NSApp.activationPolicy().rawValue)")
-        PBDiag.dumpWindows("sMW-enter")
         if mainWindow == nil {
             let host = NSHostingController(rootView: ContentView().environment(viewModel))
             let window = NSWindow(contentViewController: host)
@@ -97,9 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.isReleasedWhenClosed = false
             window.delegate = self
             mainWindow = window
-            PBDiag.log("showMainWindow CREATED window")
         }
-        guard let window = mainWindow else { PBDiag.log("showMainWindow GUARD-BAIL"); return }
+        guard let window = mainWindow else { return }
 
         if window.isMiniaturized {
             window.deminiaturize(nil)
@@ -110,21 +104,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if NSApp.activationPolicy() == .accessory {
             NSApp.setActivationPolicy(.regular)
         }
-        PBDiag.log("showMainWindow PRE-activate isActive=\(NSApp.isActive)")
         // 상태바 메뉴 클릭은 앱을 활성화하지 않으므로(macOS 14+), 백그라운드 앱에서는
         // cooperative NSApp.activate()가 no-op이 됩니다. deprecated지만 강제로
         // 활성화하는 ignoringOtherApps를 써야 창이 전면+포커스를 받습니다.
         NSApp.activate(ignoringOtherApps: true)
-        PBDiag.log("showMainWindow POST-activate isActive=\(NSApp.isActive)")
         // orderFrontRegardless 는 활성화 전파 전에도 창을 보이게 한다.
         // makeKeyAndOrderFront 는 활성화 완료 시 이 창이 key가 되도록 의도를 설정한다
         // (makeKey 단독은 비활성 상태에서 key 지정이 누락될 수 있음).
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
-        PBDiag.log("showMainWindow DONE isVisible=\(window.isVisible) isKey=\(window.isKeyWindow) onActiveSpace=\(window.isOnActiveSpace) frame=\(NSStringFromRect(window.frame))")
-        PBDiag.dumpWindows("sMW-done")
-        // 활성화 비동기 전파 후 상태 확인용
-        RunLoop.current.perform(inModes: [.default]) { PBDiag.dumpWindows("sMW-post-runloop") }
     }
 
     /// 메인 윈도우가 현재 화면에 보이는지 여부.
