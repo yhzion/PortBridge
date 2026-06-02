@@ -76,8 +76,6 @@ enum AppSingleInstance {
 
     @discardableResult
     static func activateCurrentInstance() -> Bool {
-        AppActivation.activate()
-
         guard let window = NSApp.keyWindow
             ?? NSApp.windows.first(where: { $0.isVisible || $0.isMiniaturized })
             ?? NSApp.windows.first
@@ -85,6 +83,15 @@ enum AppSingleInstance {
             return false
         }
 
+        // 창이 보이는 동안 .regular를 유지해야 합니다 (showMainWindow와 동일한 이유).
+        if NSApp.activationPolicy() == .accessory {
+            NSApp.setActivationPolicy(.regular)
+        }
+        if #available(macOS 14, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }

@@ -99,7 +99,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.delegate = self
             mainWindow = window
         }
-        AppActivation.activate()
+        // .accessory 정책에서는 창이 보이는 동안 .regular를 유지해야 합니다.
+        // 즉시 복원하면 macOS가 .accessory 전환 시 창을 숨겨버립니다.
+        // 정책 복원은 windowShouldClose(_:)에서 창이 실제로 닫힐 때 수행합니다.
+        if NSApp.activationPolicy() == .accessory {
+            NSApp.setActivationPolicy(.regular)
+        }
+        if #available(macOS 14, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         mainWindow?.makeKeyAndOrderFront(nil)
     }
 
@@ -115,6 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// 이후 `showMainWindow()` 호출 시 `makeKeyAndOrderFront`가 즉시 동작합니다.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
+        // showMainWindow()에서 .regular로 올린 정책을 창 닫힐 때 복원
+        if !viewModel.preferences.showInDock {
+            NSApp.setActivationPolicy(.accessory)
+        }
         return false
     }
 
