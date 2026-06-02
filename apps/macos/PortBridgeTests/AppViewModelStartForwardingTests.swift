@@ -91,7 +91,37 @@ final class AppViewModelStartForwardingTests: XCTestCase {
         XCTAssertEqual(active.last?.id, firstFw.id, "oldest should be last")
     }
 
-    // MARK: - Test 3: cancellation mid-start triggers tunnel cleanup
+    // MARK: - Test 3: toggle-off calls stopAndWait (not fire-and-forget stop)
+
+    func test_toggleForwarding_stop_callsStopAndWait() async {
+        let store = ServerStore(defaults: defaults)
+        let server = Server(name: "test", user: "u", host: "h.example", port: 22)
+        store.add(server)
+        let mock = MockTunnelManager()
+        let vm = AppViewModel(store: store, tunnels: mock)
+
+        // Start a forwarding
+        let fw = Forwarding(serverId: server.id, remotePort: 8080, localPort: 8080, state: .active)
+        mock.nextResult = fw
+        await vm.toggleForwarding(
+            serverId: server.id,
+            for: RemotePort(port: 8080, address: "0.0.0.0", processName: nil)
+        )
+        XCTAssertEqual(vm.forwardings.count, 1)
+
+        // Toggle off: must call stopAndWait (not stop) so the port is released
+        // before a subsequent toggle-on can rebind it.
+        await vm.toggleForwarding(
+            serverId: server.id,
+            for: RemotePort(port: 8080, address: "0.0.0.0", processName: nil)
+        )
+        XCTAssertEqual(vm.forwardings.count, 0)
+        XCTAssertEqual(mock.stopAndWaitCalls.count, 1, "toggle-off should call stopAndWait")
+        XCTAssertEqual(mock.stopAndWaitCalls.first, fw.id)
+        XCTAssertTrue(mock.stopCalls.isEmpty, "toggle-off should not call fire-and-forget stop")
+    }
+
+    // MARK: - Test 4: cancellation mid-start triggers tunnel cleanup
 
     func test_startForwarding_cancellationPath_stopsOrphanedTunnel() async {
         let store = ServerStore(defaults: defaults)

@@ -159,4 +159,59 @@ final class AppViewModelFavoritesTests: XCTestCase {
         await vm.startFavoritesIfEnabled(graceSeconds: 0)
         XCTAssertTrue(mockTunnels.startCalls.isEmpty)
     }
+
+    // MARK: - toggleAll (right-click) behavior
+
+    func test_toggleAll_offThenOn_restartsIdleFavorite() async {
+        let mockTunnels = MockTunnelManager()
+        let vm = makeViewModel(tunnels: mockTunnels)
+        let s = Server(name: "x", user: "u", host: "h")
+        vm.addServer(s)
+        vm.toggleFavorite(serverId: s.id, port: 8080)
+
+        // Simulate connected state
+        vm._test_injectActiveForwarding(serverId: s.id, remotePort: 8080)
+        XCTAssertTrue(vm.isAnyForwardingActive)
+
+        // OFF: should disconnect active forwardings
+        await vm.toggleAll()
+        XCTAssertFalse(vm.isAnyForwardingActive)
+        XCTAssertTrue(vm.forwardings.isEmpty)
+        XCTAssertEqual(mockTunnels.stopAndWaitCalls.count, 1)
+
+        // ON: should reconnect idle favorites
+        mockTunnels.nextResult = Forwarding(
+            serverId: s.id,
+            remotePort: 8080,
+            localPort: 8080,
+            state: .active
+        )
+        await vm.toggleAll()
+
+        XCTAssertTrue(vm.isAnyForwardingActive, "ON toggleAll should reconnect favorite")
+        XCTAssertEqual(vm.forwardings.count, 1)
+        XCTAssertEqual(mockTunnels.startCalls.count, 1, "tunnels.start should be called once for ON")
+    }
+
+    func test_toggleAll_offThenOn_withNonFavoriteActiveOnly() async {
+        let mockTunnels = MockTunnelManager()
+        let vm = makeViewModel(tunnels: mockTunnels)
+        let s = Server(name: "x", user: "u", host: "h")
+        vm.addServer(s)
+
+        // Non-favorite active forwarding
+        vm._test_injectActiveForwarding(serverId: s.id, remotePort: 9000)
+        XCTAssertTrue(vm.isAnyForwardingActive)
+
+        // OFF
+        await vm.toggleAll()
+        XCTAssertFalse(vm.isAnyForwardingActive)
+        XCTAssertTrue(vm.forwardings.isEmpty)
+
+        // ON: no favorites, so nothing to start
+        await vm.toggleAll()
+        XCTAssertFalse(vm.isAnyForwardingActive)
+        XCTAssertTrue(vm.forwardings.isEmpty)
+        XCTAssertTrue(mockTunnels.startCalls.isEmpty)
+    }
 }
