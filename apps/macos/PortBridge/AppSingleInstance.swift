@@ -74,29 +74,15 @@ enum AppSingleInstance {
         lock.release()
     }
 
-    @discardableResult
-    static func activateCurrentInstance() -> Bool {
-        guard let window = NSApp.keyWindow
-            ?? NSApp.windows.first(where: { $0.isVisible || $0.isMiniaturized })
-            ?? NSApp.windows.first
-        else {
-            return false
-        }
+    /// 기존 인스턴스 재활성화 요청 시 호출할 콜백. AppDelegate가 주입한다.
+    /// `NSApp.delegate as? AppDelegate` 캐스트는 Debug dylib 분리 등으로 타입 정체성이
+    /// 어긋나 nil이 될 수 있어(메뉴 "Open Main Window"가 안 되던 원인) 사용하지 않는다.
+    @MainActor static var onActivateRequested: (() -> Void)?
 
-        // 창이 보이는 동안 .regular를 유지해야 합니다 (showMainWindow와 동일한 이유).
-        if NSApp.activationPolicy() == .accessory {
-            NSApp.setActivationPolicy(.regular)
+    static func activateCurrentInstance() {
+        MainActor.assumeIsolated {
+            onActivateRequested?()
         }
-        if #available(macOS 14, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        if window.isMiniaturized {
-            window.deminiaturize(nil)
-        }
-        window.makeKeyAndOrderFront(nil)
-        return true
     }
 
     private static func requestExistingInstanceActivation() {

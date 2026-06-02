@@ -80,6 +80,10 @@ extension AppPreferences {
         AppPreferences(
             defaults: defaults,
             applyShowInDock: { show in
+                // 창이 보이는 동안 .accessory로 전환하면 macOS가 창을 숨깁니다.
+                // showMainWindow()가 관리하는 정책을 덮어쓰지 않도록 가드합니다.
+                let windowVisible = (NSApp.delegate as? AppDelegate)?.isMainWindowVisible == true
+                guard !windowVisible else { return }
                 NSApp.setActivationPolicy(show ? .regular : .accessory)
             },
             applyLaunchAtLogin: { desired in

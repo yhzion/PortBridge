@@ -11,11 +11,13 @@ import SwiftUI
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let viewModel: AppViewModel
+    private let onOpenMainWindow: () -> Void
     private var statusItem: NSStatusItem?
     private var badgeLayer: CALayer?
 
-    init(viewModel: AppViewModel) {
+    init(viewModel: AppViewModel, onOpenMainWindow: @escaping () -> Void) {
         self.viewModel = viewModel
+        self.onOpenMainWindow = onOpenMainWindow
         super.init()
     }
 
@@ -39,6 +41,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleClick(_ sender: Any?) {
         let type = NSApp.currentEvent?.type
+        PBDiag.log("handleClick type=\(String(describing: type)) isActive=\(NSApp.isActive)")
         switch type {
         case .rightMouseUp:
             Task { await viewModel.toggleAll() }
@@ -250,7 +253,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openMainWindow() {
-        (NSApp.delegate as? AppDelegate)?.showMainWindow()
+        // NSStatusItem 메뉴는 .eventTracking 런루프 모드로 추적됩니다. 그 모드에서는
+        // 윈도우 표시/활성화 호출이 삼켜지므로(DispatchQueue.main.async도 common modes라
+        // 트래킹 중 실행될 수 있음), .default 모드에서만 실행되도록 예약해 메뉴 트래킹이
+        // 끝난 뒤 showMainWindow()가 실행되게 합니다.
+        PBDiag.log("openMainWindow FIRED isActive=\(NSApp.isActive) policy=\(NSApp.activationPolicy().rawValue) mode=\(RunLoop.current.currentMode?.rawValue ?? "nil")")
+        RunLoop.current.perform(inModes: [.default]) { [weak self] in
+            PBDiag.log("openMainWindow DEFERRED-BLOCK calling onOpenMainWindow")
+            self?.onOpenMainWindow()
+        }
     }
 
     @objc private func quit() {
