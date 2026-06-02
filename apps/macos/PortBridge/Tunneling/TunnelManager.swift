@@ -49,19 +49,33 @@ final class TunnelManager: TunnelManaging {
     private(set) var active: [UUID: ActiveTunnel] = [:]
     weak var delegate: TunnelManagerDelegate?
 
-    func start(server: Server, remotePort: Int, localPort: Int) async throws -> Forwarding {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-        process.arguments = [
+    /// 터널 ssh 인자. Rust core(`crates/portbridge-core/src/tunnel.rs`)와 동일해야 한다.
+    /// `ConnectTimeout=10`이 빠지면 도달 불가 호스트가 TCP connect에서 매달려 2초 start
+    /// grace를 통과하고 가짜 `.active`로 보고된다. `ConnectTimeout`은 `BatchMode=yes` 뒤에
+    /// 두어 `cleanupOrphanedTunnels()`의 pgrep prefix가 신·구 프로세스를 모두 매칭하게 유지한다.
+    static func tunnelArguments(serverPort: Int, localPort: Int, remotePort: Int, sshTarget: String) -> [String] {
+        [
             "-N",
             "-o", "ExitOnForwardFailure=yes",
             "-o", "ServerAliveInterval=15",
             "-o", "ServerAliveCountMax=3",
             "-o", "BatchMode=yes",
-            "-p", "\(server.port)",
+            "-o", "ConnectTimeout=10",
+            "-p", "\(serverPort)",
             "-L", "\(localPort):localhost:\(remotePort)",
-            server.sshTarget
+            sshTarget
         ]
+    }
+
+    func start(server: Server, remotePort: Int, localPort: Int) async throws -> Forwarding {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        process.arguments = Self.tunnelArguments(
+            serverPort: server.port,
+            localPort: localPort,
+            remotePort: remotePort,
+            sshTarget: server.sshTarget
+        )
 
         let stderrPipe = Pipe()
         process.standardError = stderrPipe

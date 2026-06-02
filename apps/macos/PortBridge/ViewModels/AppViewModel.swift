@@ -144,13 +144,15 @@ final class AppViewModel {
             })
             let section = serverSections.first(where: { $0.server.id == key.serverId })
             let processName = section?.ports.first(where: { $0.port == key.remotePort })?.processName
+            let isOffline = if case .offline = section?.scanState { true } else { false }
             return FavoriteRow(
                 id: key,
                 serverDisplayName: server.displayName,
                 remotePort: key.remotePort,
                 localPort: forwarding?.localPort,
                 processName: processName,
-                state: forwarding?.state ?? .idle
+                state: forwarding?.state ?? .idle,
+                isOffline: isOffline
             )
         }
         .sorted { lhs, rhs in
@@ -434,6 +436,7 @@ struct FavoriteRow: Identifiable, Equatable {
     let localPort: Int?
     let processName: String?
     let state: Forwarding.State
+    let isOffline: Bool
 }
 
 #if DEBUG

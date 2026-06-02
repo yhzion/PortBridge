@@ -97,6 +97,39 @@ final class AppViewModelFavoritesTests: XCTestCase {
         XCTAssertEqual(ports, [5432, 5433, 6379])
     }
 
+    func test_favoriteRows_isOffline_tracksSectionScanState() {
+        let vm = makeViewModel()
+        let server = Server(name: "db-prod", user: "ubuntu", host: "10.0.0.1")
+        vm.addServer(server)
+        vm.toggleFavorite(serverId: server.id, port: 5432)
+        let section = vm.serverSections.first { $0.id == server.id }
+
+        section?._test_setScanState(.loaded([]))
+        XCTAssertEqual(vm.favoriteRows.first?.isOffline, false)
+
+        section?._test_setScanState(.offline(isRetrying: false))
+        XCTAssertEqual(vm.favoriteRows.first?.isOffline, true)
+
+        section?._test_setScanState(.loaded([]))
+        XCTAssertEqual(vm.favoriteRows.first?.isOffline, false, "isOffline must clear when the server comes back online")
+    }
+
+    func test_favoriteRows_offlineServer_isOfflineEvenWhenForwardingActive() {
+        // Repro: an offline server can carry a stale/fake `.active` forwarding
+        // (ssh hangs in TCP connect with no ConnectTimeout, passes the 2s grace).
+        // The menubar must not render it as connected — it must reflect offline.
+        let vm = makeViewModel()
+        let server = Server(name: "db-prod", user: "ubuntu", host: "10.0.0.1")
+        vm.addServer(server)
+        vm.toggleFavorite(serverId: server.id, port: 5432)
+        vm._test_injectActiveForwarding(serverId: server.id, remotePort: 5432)
+        vm.serverSections.first { $0.id == server.id }?._test_setScanState(.offline(isRetrying: false))
+
+        let row = vm.favoriteRows.first
+        XCTAssertEqual(row?.isOffline, true)
+        XCTAssertEqual(row?.state, .active, "raw forwarding state is preserved; the view layer suppresses ● when offline")
+    }
+
     func test_favoriteRows_orphanedFavorite_excluded() {
         let vm = makeViewModel()
         let ghostServerId = UUID()

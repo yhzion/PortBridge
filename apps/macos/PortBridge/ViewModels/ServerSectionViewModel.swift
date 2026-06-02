@@ -67,3 +67,13 @@ final class ServerSectionViewModel: Identifiable {
         isExpanded.toggle()
     }
 }
+
+#if DEBUG
+    extension ServerSectionViewModel {
+        // Test-only helper to inject a scan state without driving an async scan.
+        // swiftlint:disable:next identifier_name
+        func _test_setScanState(_ state: ServerScanState) {
+            scanState = state
+        }
+    }
+#endif
