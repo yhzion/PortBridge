@@ -22,26 +22,26 @@ enum AppActivation {
     @discardableResult
     static func withRegularPolicy<T>(_ work: () throws -> T) rethrows -> T {
         let originalPolicy = NSApp.activationPolicy()
-        
+
         // 이미 .regular이면 전환 불필요
         guard originalPolicy != .regular else {
             return try work()
         }
-        
+
         // 임시로 .regular로 전환
         NSApp.setActivationPolicy(.regular)
-        
+
         let result = try work()
-        
+
         // macOS가 policy 전환과 UI 표시를 처리할 시간을 주기 위해
         // 다음 run loop cycle에서 원래 policy로 복원
         DispatchQueue.main.async {
             NSApp.setActivationPolicy(originalPolicy)
         }
-        
+
         return result
     }
-    
+
     /// Accessory 모드에서도 안전하게 앱을 활성화합니다.
     ///
     /// - Parameter ignoringOtherApps: macOS 14 미만에서 다른 앱을 무시하고 활성화할지 여부
@@ -55,7 +55,7 @@ enum AppActivation {
             }
         }
     }
-    
+
     /// Accessory 모드에서도 안전하게 NSAlert를 모달로 실행합니다.
     ///
     /// - Parameter alert: 표시할 NSAlert
