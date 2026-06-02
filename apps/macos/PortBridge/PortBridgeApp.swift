@@ -99,11 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.delegate = self
             mainWindow = window
         }
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        AppActivation.activate()
         mainWindow?.makeKeyAndOrderFront(nil)
     }
 

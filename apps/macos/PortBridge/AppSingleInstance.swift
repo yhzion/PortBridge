@@ -76,7 +76,7 @@ enum AppSingleInstance {
 
     @discardableResult
     static func activateCurrentInstance() -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
+        AppActivation.activate()
 
         guard let window = NSApp.keyWindow
             ?? NSApp.windows.first(where: { $0.isVisible || $0.isMiniaturized })
