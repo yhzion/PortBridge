@@ -313,7 +313,7 @@ final class AppViewModel {
 
     func toggleForwarding(serverId: UUID, for port: RemotePort) async {
         if let existing = forwardings.first(where: { $0.serverId == serverId && $0.remotePort == port.port }) {
-            tunnels.stop(existing.id)
+            await tunnels.stopAndWait(existing.id)
             forwardings.removeAll { $0.id == existing.id }
             return
         }
