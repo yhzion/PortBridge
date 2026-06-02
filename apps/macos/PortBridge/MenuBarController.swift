@@ -105,7 +105,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 )
                 item.target = self
                 item.representedObject = row
-                item.state = isActiveState(row.state) ? .on : .off
+                item.state = isConnected(row) ? .on : .off
+                if row.isOffline {
+                    // 오프라인 서버는 흐리게 — 클릭은 가능하게 유지(사용자가 stale 터널을 끌 수 있도록).
+                    item.attributedTitle = NSAttributedString(
+                        string: favoriteTitle(for: row),
+                        attributes: [.foregroundColor: NSColor.secondaryLabelColor]
+                    )
+                }
                 menu.addItem(item)
             }
         }
@@ -209,9 +216,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func favoriteTitle(for row: FavoriteRow) -> String {
-        let dot = isActiveState(row.state) ? "● " : "○ "
+        let dot = isConnected(row) ? "● " : "○ "
         let proc = row.processName.map { " \($0)" } ?? ""
         return "\(dot)\(row.serverDisplayName):\(row.remotePort)\(proc)"
+    }
+
+    /// 메뉴에 ● 연결됨으로 보일지 판정. 오프라인 서버는 (ConnectTimeout 미설정 탓에 stale/가짜
+    /// `.active`가 될 수 있어) 절대 연결됨으로 표시하지 않는다 — 메인 창의 오프라인 처리와 일관.
+    private func isConnected(_ row: FavoriteRow) -> Bool {
+        !row.isOffline && isActiveState(row.state)
     }
 
     private func isActiveState(_ state: Forwarding.State) -> Bool {
