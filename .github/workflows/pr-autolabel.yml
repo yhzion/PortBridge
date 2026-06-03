@@ -1,0 +1,41 @@
+name: PR Auto-label
+
+# PR 제목의 Conventional Commits prefix를 읽어 라벨을 자동 부여한다.
+# 이 라벨은 .github/release.yml의 changelog 카테고리 그룹핑 기준이 된다.
+#
+# pull_request(_target 아님): 이 레포는 same-repo 브랜치로만 PR을 올리므로
+# GITHUB_TOKEN이 write 권한을 받아 --add-label이 동작한다. pull_request_target은
+# base 브랜치 버전의 워크플로를 실행해 이 PR 자체로는 검증이 불가하고, 불필요한
+# fork 지원을 위해 write 토큰 트리거를 쓰는 보안 부담만 늘어 채택하지 않는다.
+on:
+  pull_request:
+    types: [opened, edited]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    name: Label by conventional commit prefix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add label from title
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # 제목은 env로 전달해 셸 인젝션을 차단한다(직접 보간 금지).
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          # "feat(macos): …" → feat,  "ci: …" → ci,  prefix 없으면 제목 전체
+          type="${PR_TITLE%%[:(]*}"
+          case "$type" in
+            feat) label=enhancement ;;
+            fix) label=bug ;;
+            docs) label=documentation ;;
+            refactor|ci|chore|perf|test|build|style) label=maintenance ;;
+            *) echo "no label mapping for prefix '$type' — skipping"; exit 0 ;;
+          esac
+          echo "title prefix '$type' → label '$label'"
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$label"

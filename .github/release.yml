@@ -1,0 +1,15 @@
+# GitHub 자동 릴리즈 노트(--generate-notes)의 카테고리 그룹핑.
+# 분류 기준은 PR 라벨이며, 라벨은 .github/workflows/pr-autolabel.yml이
+# PR 제목 prefix를 읽어 자동 부여한다.
+changelog:
+  categories:
+    - title: 🚀 Features
+      labels: [enhancement]
+    - title: 🐛 Bug Fixes
+      labels: [bug]
+    - title: 📚 Documentation
+      labels: [documentation]
+    - title: 🔧 Maintenance
+      labels: [maintenance]
+    - title: 기타 변경
+      labels: ["*"]
