@@ -46,4 +46,16 @@ final class MenuBarControllerLogicTests: XCTestCase {
         let last = Date(timeIntervalSince1970: 985) // exactly 15s ago
         XCTAssertTrue(MenuBarController.shouldScan(now: now, last: last, throttle: 15))
     }
+
+    // MARK: - menuTitle (캐노니컬 메뉴 문자열)
+
+    func test_menuTitle_activeWithProcess() {
+        let d = ForwardingDisplay.active(host: "myserver (1.2.3.4)", remotePort: 8080, localPort: 3000, processName: "nginx")
+        XCTAssertEqual(MenuBarController.menuTitle(for: d), "● myserver (1.2.3.4):8080 → :3000 · nginx")
+    }
+
+    func test_menuTitle_inactiveHollow() {
+        let d = ForwardingDisplay.inactive(host: "h", remotePort: 5432, processName: nil)
+        XCTAssertEqual(MenuBarController.menuTitle(for: d), "○ h:5432")
+    }
 }

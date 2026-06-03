@@ -124,6 +124,25 @@ final class AppViewModel {
         store.servers.first { $0.id == serverId }?.displayName
     }
 
+    /// 단일 `Forwarding`을 캐노니컬 표시 모델로 변환한다(메인 윈도우 활성 행·메뉴 Active 공용).
+    /// host는 `serverDisplayName(for:)`, processName은 스캔된 `serverSections`에서 끌어온다.
+    /// status는 raw 매핑(Active 표면은 현행에도 offline 억제가 없음).
+    func display(for forwarding: Forwarding) -> ForwardingDisplay {
+        let host = serverDisplayName(for: forwarding.serverId) ?? ""
+        let section = serverSections.first { $0.server.id == forwarding.serverId }
+        let processName = section?.ports.first { $0.port == forwarding.remotePort }?.processName
+        switch forwarding.state {
+        case .active:
+            return .active(host: host, remotePort: forwarding.remotePort, localPort: forwarding.localPort, processName: processName)
+        case .starting:
+            return .starting(host: host, remotePort: forwarding.remotePort, processName: processName)
+        case let .error(message):
+            return .error(host: host, remotePort: forwarding.remotePort, message: message, processName: processName)
+        case .idle:
+            return .inactive(host: host, remotePort: forwarding.remotePort, processName: processName)
+        }
+    }
+
     // MARK: - Favorites
 
     func isFavorite(serverId: UUID, port: Int) -> Bool {
@@ -442,6 +461,31 @@ struct FavoriteRow: Identifiable, Equatable {
     /// 서버의 마지막 스캔이 성공해 도달 가능함이 확정된 경우(`scanState == .loaded`).
     /// 메뉴바는 이것이 false이고 신뢰 가능한 연결도 아닐 때 행을 흐리게 표시한다.
     let isOnlineConfirmed: Bool
+}
+
+extension FavoriteRow {
+    /// 즐겨찾기 행의 캐노니컬 표시 모델.
+    /// offline 서버는 stale `.active`라도 연결됨으로 보이면 안 되므로(ConnectTimeout 미설정 탓
+    /// 가짜 `.active` 가능 — `MenuBarController.isConnected`와 일관) status를 `.inactive`로 보정한다.
+    /// `isConnected`/`isDimmed` 로직 자체는 바꾸지 않고 그 결과만 status에 주입한다.
+    var display: ForwardingDisplay {
+        if isOffline {
+            return .inactive(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        }
+        switch state {
+        case .active:
+            if let localPort {
+                return .active(host: serverDisplayName, remotePort: remotePort, localPort: localPort, processName: processName)
+            }
+            return .inactive(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        case .starting:
+            return .starting(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        case let .error(message):
+            return .error(host: serverDisplayName, remotePort: remotePort, message: message, processName: processName)
+        case .idle:
+            return .inactive(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        }
+    }
 }
 
 #if DEBUG

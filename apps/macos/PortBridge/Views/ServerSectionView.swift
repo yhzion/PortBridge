@@ -94,9 +94,11 @@ struct ServerSectionView: View {
             ForEach(inactivePortRows) { row in
                 let port = row.port
                 ForwardingRowView(
-                    port: port,
-                    forwarding: nil,
-                    serverDisplayName: nil,
+                    display: .inactive(
+                        host: section.server.displayName,
+                        remotePort: port.port,
+                        processName: port.processName
+                    ),
                     onToggle: { onToggle(port) },
                     isFavorite: isFavorite(port),
                     onFavoriteToggle: { onFavoriteToggle(port) }
