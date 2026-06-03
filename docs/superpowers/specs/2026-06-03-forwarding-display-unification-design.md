@@ -105,8 +105,20 @@ nonisolated struct ForwardingDisplay: Equatable {
     let status: Status
     let host: String          // Server.displayName
     let remotePort: Int
-    let localPort: Int?       // active일 때만 채움
+    let localPort: Int?       // status == .active일 때만 비-nil (init이 정규화)
     let processName: String?
+
+    /// 불변식 강제: init이 active 외 상태의 localPort를 nil로 정규화.
+    /// (Finding 2) 커스텀 init이 없으면 @testable 테스트에서 internal memberwise
+    /// init으로 status: .inactive, localPort: 3000 같은 위반 조합을 만들 수 있으므로
+    /// 반드시 명시 init으로 정규화한다.
+    init(status: Status, host: String, remotePort: Int, localPort: Int?, processName: String?) {
+        self.status = status
+        self.host = host
+        self.remotePort = remotePort
+        self.localPort = (status == .active) ? localPort : nil   // 정규화
+        self.processName = processName
+    }
 
     /// 순서·라벨의 단일 출처. 상태 dot/심볼은 미포함.
     /// "host:remotePort[ → :localPort][ · processName]"
@@ -116,29 +128,41 @@ nonisolated struct ForwardingDisplay: Equatable {
     var statusDot: String { (status == .active || status == .starting) ? "●" : "○" }
 }
 ```
-- `line`은 active일 때만 `→ :localPort` 포함, processName 있으면 ` · processName` 추가.
-- **불변식**: `localPort != nil ⇔ status == .active`. 팩토리가 보장하며, 위반 조합은 생성 불가(starting/error/inactive는 localPort를 항상 `nil`로 떨어뜨린다 — 원본 `Forwarding.localPort`가 후보값을 들고 있어도 무시).
+- `line`은 `status == .active`일 때만 `→ :localPort` 포함, processName 있으면 ` · processName` 추가.
+- **불변식**: `localPort != nil ⇒ status == .active`. init이 강제하므로(active 외엔 localPort를 nil로 떨굼) 위반 조합은 표현 불가 — `@testable` 경유로도. 원본 `Forwarding.localPort`가 starting/error에서 후보값을 들고 있어도 무시된다.
+- **`status`는 raw `Forwarding.State`가 아니라 "신뢰 보정된 *표시* 상태"다.** 각 생성처가 결정한다(§5.2/§5.3). 특히 Favorites는 offline 방어를 status에 접어 넣어야 한다(아래 Finding 1).
 - **Sendable**: 기존 모델(`Server`/`RemotePort`/`Forwarding`)과 동일하게 `Sendable`을 **명시 선언하지 않는다**(전 필드 값 타입이라 모듈 내 암묵 적용; 현행 패턴 일치). 크로스-액터 전달이 필요해지면 컴파일러가 알려줄 때 추가.
 
 ### 5.2 빌드 위치 — `AppViewModel` (확정, "또는" 제거)
-- `Forwarding.State` → `ForwardingDisplay.Status` 매핑 헬퍼(순수 함수).
-- **메뉴 Active**: `nonFavoriteActive: [Forwarding]`는 **그대로 유지**한다 — 메뉴 아이템 `representedObject = fw`가 `stopActiveForwarding` 토글 라우팅에 필요하기 때문(`MenuBarController.swift:157,295`). 대신 `AppViewModel`에 `func display(for forwarding: Forwarding) -> ForwardingDisplay`를 추가: host는 `serverDisplayName(for: fw.serverId)`, processName은 `serverSections`의 해당 포트에서 조회(= `favoriteRows`와 동일 enrich 경로).
-- **Favorites**: `FavoriteRow`는 이미 `serverDisplayName`/`remotePort`/`localPort`/`processName`/`state`를 전부 보유하므로, 파생 계산 프로퍼티 `var display: ForwardingDisplay`를 추가한다. `FavoriteRow`의 dimming/연결 필드(`isOffline`/`isOnlineConfirmed`)는 **유지** — 표시 포맷만 캐노니컬로.
+- `Forwarding.State` → `ForwardingDisplay.Status` 매핑은 **raw 매핑**(`.active→.active`, `.starting→.starting`, `.error→.error`, `.idle/nil→.inactive`)과 **신뢰 보정**(offline 게이트) 두 단계로 본다.
+- **메뉴 Active**: `nonFavoriteActive: [Forwarding]`는 **그대로 유지**한다 — 메뉴 아이템 `representedObject = fw`가 `stopActiveForwarding` 토글 라우팅에 필요하기 때문(`MenuBarController.swift:157,295`). 대신 `AppViewModel`에 `func display(for forwarding: Forwarding) -> ForwardingDisplay`를 추가: host는 `serverDisplayName(for: fw.serverId)`, processName은 `serverSections`의 해당 포트에서 조회(= `favoriteRows`와 동일 enrich 경로). status는 raw 매핑(Active 섹션은 현행에도 offline 억제가 없음).
+- **Favorites (Finding 1 — 신뢰 보정 필수)**: `FavoriteRow`는 이미 `serverDisplayName`/`remotePort`/`localPort`/`processName`/`state`/`isOffline`을 보유하므로, 파생 계산 프로퍼티 `var display: ForwardingDisplay`를 추가한다. **단, status는 raw `state`가 아니라 offline 게이트를 적용한 값이어야 한다**:
+  ```
+  status = isOffline ? .inactive : rawMap(state)
+  ```
+  이는 현행 `favoriteTitle`의 dot 로직 `!isOffline && isActiveState(state)`(`MenuBarController.swift:241`)과 **동치**다(offline → ○, no arrow). `AppViewModelFavoritesTests.swift:139/152`("offline 서버의 stale `.active`는 ●로 보이면 안 됨")를 보존한다. `isConnected`/`isDimmed` **로직 자체는 변경하지 않는다**(비목표) — 그 *결과*를 status에 주입할 뿐.
 
-### 5.3 소비처 3곳
-1. `MenuBarController.favoriteTitle(for: row)` → `"\(row.display.statusDot) \(row.display.line)"`.
+### 5.3 소비처 (메뉴 2 + 메인 윈도우 행 2 호출부)
+1. `MenuBarController.favoriteTitle(for: row)` → `"\(row.display.statusDot) \(row.display.line)"`. dot이 offline 보정된 status에서 나오므로(§5.2) 기존 방어 유지.
 2. `MenuBarController` buildMenu Active 아이템 title → `"\(d.statusDot) \(d.line)"` (`d = viewModel.display(for: fw)`). `representedObject`는 종전대로 `fw`.
-3. `ForwardingRowView` → 상태 인디케이터(심볼) + `Text(d.line)`(host 세그먼트만 middle truncation) + ★/브라우저 버튼.
+3. `ForwardingRowView` (메인 윈도우) — 상태 인디케이터(심볼) + `Text(d.line)`(host 세그먼트만 middle truncation) + ★/브라우저 버튼.
+   - **두 호출부 모두 host 주입 필요 (Finding 3)**:
+     - **활성 행** `ServerListView.swift:191` — 이미 `serverDisplayName: vm.serverDisplayName(for:)` 주입함(변경 없음).
+     - **비활성 행** `ServerSectionView.swift:96-99` — 현재 `serverDisplayName: nil`. §4.1의 "모든 행 host 표시"를 위해 `section.server.displayName`을 주입하도록 변경한다.
+   - 권장 리팩토링: 두 호출부의 인자 표류를 막기 위해 `ForwardingRowView`가 개별 인자 대신 `ForwardingDisplay`(+ port/콜백)를 받게 한다. 그러면 host 누락이 타입으로 차단됨.
    - **접근성**: `accessibilityLabel`은 `line`을 **그대로 쓰지 않는다**. `line`은 `→`(U+2192)·`·`(U+00B7)를 포함해 VoiceOver 발음이 어색하므로(현행은 "포워딩 중" 같은 단어형으로 별도 구성), `ForwardingDisplay`에 음성용 `accessibilityText`(예: `"myserver (1.2.3.4) 포트 8080, 로컬 3000으로 포워딩 중, nginx"`)를 별도 제공하고 행은 이를 사용한다. 시각 라인과 음성 라인의 필드·순서는 동일하게 유지.
 
 ## 6. 테스트 전략
 
-- **`ForwardingDisplayTests`** (신규): 불변식 `localPort != nil ⇔ active` 때문에 단순 4×2×2=16 조합이 아니라 **유효 조합만** 검증한다:
-  - active × {process 유/무} → `→ :localPort` 항상 포함 (4케이스: localPort는 active에서만 존재)
-  - {starting, error, inactive} × {process 유/무} → 화살표 없음, dot은 starting=`●`/error·inactive=`○` (6케이스)
+- **`ForwardingDisplayTests`** (신규): 불변식 `localPort != nil ⇒ active` 때문에 단순 4×2×2=16이 아니라 **유효 조합만** 검증한다(축: 상태 4종 × process 유/무 = 8):
+  - active × {process 유/무} → `→ :localPort` 항상 포함, dot `●` (2케이스)
+  - starting × {process 유/무} → 화살표 없음, dot `●` (2케이스)
+  - error × {process 유/무} → 화살표 없음, dot `○` (2케이스)
+  - inactive × {process 유/무} → 화살표 없음, dot `○` (2케이스)
   - host 계약(§3.1): `name==nil` → `host`, `name!=nil` → `"name (host)"` 두 분기
   - `accessibilityText`가 `→`/`·` 미포함 단어형인지 검증
-- 위반 조합(예: inactive인데 localPort 지정)은 팩토리가 생성하지 않음을 회귀로 고정.
+  - **init 정규화(Finding 2)**: `init(status: .inactive, localPort: 3000, …)`의 결과 `localPort == nil`임을 검증(위반 조합이 표현 불가함을 고정).
+- **`AppViewModelFavoritesTests`**: offline 서버의 stale `.active` 즐겨찾기에서 `display.status == .inactive`(→ dot `○`, 화살표 없음)임을 검증 — 기존 `:139/:152` 방어를 캐노니컬 경로로 회귀 고정(Finding 1).
 - **`MenuBarControllerLogicTests`**: Active 섹션 타이틀이 호스트·프로세스를 포함하는지 검증(현재 사각).
 - 기존 `ForwardingTests`, `AppViewModelFavoritesTests`, `MenuBarControllerLogicTests` 회귀 확인.
 - Swift 테스트 로컬 실행 불가(macOS 26 LaunchServices) — CI parity 잡(#60)으로 검증.
