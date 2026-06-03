@@ -29,6 +29,24 @@ struct ServerSectionView: View {
         return section.ports.filter { !activeNums.contains($0.port) && matches($0) }
     }
 
+    /// 포트 행의 List 정체성은 서버 단위로 유일해야 한다. `RemotePort.id`는 "address:port"뿐이라
+    /// 여러 서버가 같은 포트를 같은 주소로 노출하면(예: 둘 다 0.0.0.0:5173) 한 List 안에서 id가
+    /// 충돌해 SwiftUI가 두 행을 같은 정체성으로 보고 탭/뷰를 엉뚱한 서버 행에 재사용한다.
+    /// 서버 id를 접두로 붙여 전역 유일하게 만든다.
+    private struct IdentifiedPort: Identifiable {
+        let id: String
+        let port: RemotePort
+    }
+
+    private var inactivePortRows: [IdentifiedPort] {
+        inactivePorts.map { IdentifiedPort(id: Self.rowID(serverID: section.server.id, port: $0), port: $0) }
+    }
+
+    /// 포트 행의 서버-유일 정체성. 회귀 방지를 위해 순수 함수로 분리(테스트 대상).
+    static func rowID(serverID: UUID, port: RemotePort) -> String {
+        "\(serverID.uuidString):\(port.id)"
+    }
+
     var body: some View {
         sectionHeader
         if section.isExpanded && !isOffline {
@@ -73,7 +91,8 @@ struct ServerSectionView: View {
                 .padding(.vertical, PBLayout.Space.s1)
 
         case .loaded:
-            ForEach(inactivePorts) { port in
+            ForEach(inactivePortRows) { row in
+                let port = row.port
                 ForwardingRowView(
                     port: port,
                     forwarding: nil,

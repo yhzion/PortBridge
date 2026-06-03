@@ -44,7 +44,7 @@ struct ForwardingRowView: View {
             return String(localized: "forwarding.row.subtitle.connecting", defaultValue: "\(serverPrefix)포워딩 연결 중…")
         case .active:
             if let local = forwarding?.localPort {
-                return String(localized: "forwarding.row.subtitle.activeLocal", defaultValue: "→ :\(local) 포워딩 중")
+                return String(localized: "forwarding.row.subtitle.activeLocal", defaultValue: "\(serverPrefix)→ :\(local) 포워딩 중")
             }
             return String(localized: "forwarding.row.subtitle.active", defaultValue: "\(serverPrefix)포워딩 중")
         case .error:
