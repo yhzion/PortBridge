@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # build-ffi.sh runs as an Xcode build phase and shells out to cargo; pin a
       # toolchain so it resolves even if the runner image changes.
@@ -60,7 +60,7 @@ jobs:
           shasum -a 256 "$DIST_DIR/PortBridge.zip" > "$DIST_DIR/PortBridge.zip.sha256"
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: PortBridge
           path: |
