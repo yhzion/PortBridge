@@ -2,57 +2,14 @@ import AppKit
 import SwiftUI
 
 struct ForwardingRowView: View {
-    let port: RemotePort
-    let forwarding: Forwarding?
-    let serverDisplayName: String?
+    let display: ForwardingDisplay
     let onToggle: () -> Void
     let isFavorite: Bool
     let onFavoriteToggle: () -> Void
 
-    private var isStarting: Bool {
-        forwarding?.state == .starting
-    }
-
-    private var isErrorState: Bool {
-        if case .error = forwarding?.state { return true }
-        return false
-    }
-
-    private var statusSymbol: (name: String, color: Color) {
-        switch forwarding?.state {
-        case .active: return ("circle.fill", .green)
-        case .error: return ("exclamationmark.triangle.fill", .red)
-        case .starting, .idle, .none: return ("circle", .secondary)
-        }
-    }
-
-    private var isActive: Bool {
-        forwarding?.state == .active
-    }
-
-    private var showPortColumn: Bool {
-        switch forwarding?.state {
-        case .active, .error, .idle, .none: return true
-        default: return false
-        }
-    }
-
-    private var stateSubtitle: String? {
-        let serverPrefix = serverDisplayName.map { "\($0) · " } ?? ""
-        switch forwarding?.state {
-        case .starting:
-            return String(localized: "forwarding.row.subtitle.connecting", defaultValue: "\(serverPrefix)포워딩 연결 중…")
-        case .active:
-            if let local = forwarding?.localPort {
-                return String(localized: "forwarding.row.subtitle.activeLocal", defaultValue: "\(serverPrefix)→ :\(local) 포워딩 중")
-            }
-            return String(localized: "forwarding.row.subtitle.active", defaultValue: "\(serverPrefix)포워딩 중")
-        case .error:
-            return String(localized: "forwarding.row.subtitle.error", defaultValue: "\(serverPrefix)포워딩 실패 — 클릭해 다시 시도")
-        case .idle, .none:
-            return nil
-        }
-    }
+    private var isStarting: Bool { display.status == .starting }
+    private var isActive: Bool { display.status == .active }
+    private var isErrorState: Bool { display.status == .error }
 
     @State private var isRowHovering = false
 
@@ -69,38 +26,26 @@ struct ForwardingRowView: View {
             .accessibilityLabel(isFavorite
                 ? String(localized: "forwarding.row.favorite.a11yRemove", defaultValue: "즐겨찾기 해제")
                 : String(localized: "forwarding.row.favorite.a11yAdd", defaultValue: "즐겨찾기 추가"))
-            .help(isFavorite ? String(localized: "forwarding.row.favorite.helpRemove", defaultValue: "즐겨찾기에서 제거") : String(
-                localized: "forwarding.row.favorite.helpAdd",
-                defaultValue: "즐겨찾기에 추가"
-            ))
+            .help(isFavorite
+                ? String(localized: "forwarding.row.favorite.helpRemove", defaultValue: "즐겨찾기에서 제거")
+                : String(localized: "forwarding.row.favorite.helpAdd", defaultValue: "즐겨찾기에 추가"))
 
             Button(action: onToggle) {
                 HStack(alignment: .center, spacing: 10) {
                     statusIndicator
                         .frame(width: 18, height: 18)
 
-                    if showPortColumn {
-                        Text(verbatim: ":\(port.port)")
-                            .font(.system(.body, design: .monospaced).bold())
-                            .monospacedDigit()
-                            .foregroundStyle(isErrorState ? .red : isActive ? .green : .primary)
-                            .frame(minWidth: 48, alignment: .trailing)
-                    }
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(rightPrimary)
-                            .font(.caption)
-                            .foregroundStyle(rightPrimaryColor)
+                    HStack(spacing: 0) {
+                        Text(display.host)
+                            .truncationMode(.middle)
                             .lineLimit(1)
-                            .truncationMode(.tail)
-
-                        if let secondary = rightSecondary {
-                            Text(secondary)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                        }
+                            .layoutPriority(1)
+                        Text(display.suffix)
+                            .lineLimit(1)
+                            .layoutPriority(2)
                     }
+                    .font(.system(.body, design: .monospaced))
+                    .monospacedDigit()
 
                     Spacer(minLength: 4)
                 }
@@ -108,51 +53,27 @@ struct ForwardingRowView: View {
             }
             .buttonStyle(.plain)
             .disabled(isStarting)
-            .help(forwarding?.state == .active
+            .help(isActive
                 ? String(localized: "forwarding.row.toggle.helpStop", defaultValue: "클릭해 포워딩 끄기")
                 : String(localized: "forwarding.row.toggle.helpStart", defaultValue: "클릭해 포워딩 켜기"))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint(forwarding?.state == .active
+            .accessibilityLabel(display.accessibilityText)
+            .accessibilityHint(isActive
                 ? String(localized: "forwarding.row.toggle.a11yHintStop", defaultValue: "이중 탭하여 포워딩 끄기")
                 : String(localized: "forwarding.row.toggle.a11yHintStart", defaultValue: "이중 탭하여 포워딩 켜기"))
 
-            if isActive, let local = forwarding?.localPort {
+            if isActive, let local = display.localPort {
                 OpenInBrowserButton(localPort: local)
             }
 
-            if case .error(let msg) = forwarding?.state {
+            if isErrorState, let message = display.errorMessage {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
-                    .help(String(msg))
+                    .help(message)
             }
         }
         .padding(.vertical, PBLayout.Space.s1)
         .onHover { isRowHovering = $0 }
-    }
-
-    private var rightPrimary: String {
-        if let stateSubtitle { return stateSubtitle }
-        return port.scopeLabel
-    }
-
-    private var rightPrimaryColor: Color {
-        if isErrorState { return .red }
-        if isActive { return .green }
-        return .secondary
-    }
-
-    private var rightSecondary: String? {
-        guard stateSubtitle == nil, let name = port.processName, !name.isEmpty else { return nil }
-        return name
-    }
-
-    private var accessibilityLabel: String {
-        if let stateSubtitle {
-            let server = serverDisplayName.map { "\($0) · " } ?? ""
-            return ":\(port.port) \(server)\(stateSubtitle)"
-        }
-        return port.displayLine
     }
 
     @ViewBuilder
@@ -163,6 +84,14 @@ struct ForwardingRowView: View {
         } else {
             Image(systemName: statusSymbol.name)
                 .foregroundStyle(statusSymbol.color)
+        }
+    }
+
+    private var statusSymbol: (name: String, color: Color) {
+        switch display.status {
+        case .active: return ("circle.fill", .green)
+        case .error: return ("exclamationmark.triangle.fill", .red)
+        case .starting, .inactive: return ("circle", .secondary)
         }
     }
 }
@@ -225,11 +154,9 @@ private struct OpenInBrowserButton: View {
     }
 }
 
-#Preview("Idle · 비활성 포트") {
+#Preview("Inactive · 비활성 포트") {
     ForwardingRowView(
-        port: RemotePort(port: 8080, address: "0.0.0.0", processName: "nginx"),
-        forwarding: nil,
-        serverDisplayName: nil,
+        display: .inactive(host: "myserver (1.2.3.4)", remotePort: 8080, processName: "nginx"),
         onToggle: {},
         isFavorite: false,
         onFavoriteToggle: {}
@@ -240,9 +167,7 @@ private struct OpenInBrowserButton: View {
 
 #Preview("Starting") {
     ForwardingRowView(
-        port: RemotePort(port: 5432, address: "127.0.0.1", processName: "postgres"),
-        forwarding: Forwarding(serverId: UUID(), remotePort: 5432, localPort: 5432, state: .starting),
-        serverDisplayName: "db-01",
+        display: .starting(host: "db-01 (10.0.0.1)", remotePort: 5432, processName: "postgres"),
         onToggle: {},
         isFavorite: false,
         onFavoriteToggle: {}
@@ -253,9 +178,7 @@ private struct OpenInBrowserButton: View {
 
 #Preview("Active") {
     ForwardingRowView(
-        port: RemotePort(port: 6443, address: "0.0.0.0", processName: nil),
-        forwarding: Forwarding(serverId: UUID(), remotePort: 6443, localPort: 6443, state: .active),
-        serverDisplayName: "k8s-master",
+        display: .active(host: "k8s-master (10.0.0.2)", remotePort: 6443, localPort: 6443, processName: nil),
         onToggle: {},
         isFavorite: true,
         onFavoriteToggle: {}
@@ -266,9 +189,7 @@ private struct OpenInBrowserButton: View {
 
 #Preview("Error") {
     ForwardingRowView(
-        port: RemotePort(port: 3389, address: "0.0.0.0", processName: "rdp"),
-        forwarding: Forwarding(serverId: UUID(), remotePort: 3389, localPort: 3389, state: .error("connection refused")),
-        serverDisplayName: "win-vm",
+        display: .error(host: "win-vm (10.0.0.3)", remotePort: 3389, message: "connection refused", processName: "rdp"),
         onToggle: {},
         isFavorite: false,
         onFavoriteToggle: {}

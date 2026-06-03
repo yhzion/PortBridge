@@ -186,9 +186,7 @@ struct ServerListView: View {
         if let section = vm.serverSections.first(where: { $0.server.id == fw.serverId }),
            let port = section.ports.first(where: { $0.port == fw.remotePort }) {
             ForwardingRowView(
-                port: port,
-                forwarding: fw,
-                serverDisplayName: vm.serverDisplayName(for: fw.serverId),
+                display: vm.display(for: fw),
                 onToggle: { Task { await vm.toggleForwarding(serverId: fw.serverId, for: port) } },
                 isFavorite: vm.isFavorite(serverId: fw.serverId, port: port.port),
                 onFavoriteToggle: { vm.toggleFavorite(serverId: fw.serverId, port: port.port) }
