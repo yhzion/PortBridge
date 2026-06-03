@@ -149,7 +149,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             menu.addItem(activeHeader)
             for fw in actives {
                 let item = NSMenuItem(
-                    title: ":\(fw.remotePort)",
+                    title: Self.menuTitle(for: viewModel.display(for: fw)),
                     action: #selector(stopActiveForwarding(_:)),
                     keyEquivalent: ""
                 )
@@ -238,10 +238,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return menu
     }
 
+    /// 메뉴 항목 평문 타이틀의 단일 출처. `buildMenu`/`favoriteTitle`이 private라
+    /// 직접 테스트가 불가하므로 순수 함수로 분리해 테스트 대상으로 노출한다.
+    static func menuTitle(for display: ForwardingDisplay) -> String {
+        "\(display.statusDot) \(display.line)"
+    }
+
     private func favoriteTitle(for row: FavoriteRow) -> String {
-        let dot = isConnected(row) ? "● " : "○ "
-        let proc = row.processName.map { " \($0)" } ?? ""
-        return "\(dot)\(row.serverDisplayName):\(row.remotePort)\(proc)"
+        Self.menuTitle(for: row.display)
     }
 
     /// 메뉴에 ● 연결됨으로 보일지 판정. 오프라인 서버는 (ConnectTimeout 미설정 탓에 stale/가짜
