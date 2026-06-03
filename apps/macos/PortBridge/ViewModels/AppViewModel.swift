@@ -124,6 +124,25 @@ final class AppViewModel {
         store.servers.first { $0.id == serverId }?.displayName
     }
 
+    /// 단일 `Forwarding`을 캐노니컬 표시 모델로 변환한다(메인 윈도우 활성 행·메뉴 Active 공용).
+    /// host는 `serverDisplayName(for:)`, processName은 스캔된 `serverSections`에서 끌어온다.
+    /// status는 raw 매핑(Active 표면은 현행에도 offline 억제가 없음).
+    func display(for forwarding: Forwarding) -> ForwardingDisplay {
+        let host = serverDisplayName(for: forwarding.serverId) ?? ""
+        let section = serverSections.first { $0.server.id == forwarding.serverId }
+        let processName = section?.ports.first { $0.port == forwarding.remotePort }?.processName
+        switch forwarding.state {
+        case .active:
+            return .active(host: host, remotePort: forwarding.remotePort, localPort: forwarding.localPort, processName: processName)
+        case .starting:
+            return .starting(host: host, remotePort: forwarding.remotePort, processName: processName)
+        case let .error(message):
+            return .error(host: host, remotePort: forwarding.remotePort, message: message, processName: processName)
+        case .idle:
+            return .inactive(host: host, remotePort: forwarding.remotePort, processName: processName)
+        }
+    }
+
     // MARK: - Favorites
 
     func isFavorite(serverId: UUID, port: Int) -> Bool {
