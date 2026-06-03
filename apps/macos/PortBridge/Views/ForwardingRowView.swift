@@ -7,9 +7,17 @@ struct ForwardingRowView: View {
     let isFavorite: Bool
     let onFavoriteToggle: () -> Void
 
-    private var isStarting: Bool { display.status == .starting }
-    private var isActive: Bool { display.status == .active }
-    private var isErrorState: Bool { display.status == .error }
+    private var isStarting: Bool {
+        display.status == .starting
+    }
+
+    private var isActive: Bool {
+        display.status == .active
+    }
+
+    private var isErrorState: Bool {
+        display.status == .error
+    }
 
     @State private var isRowHovering = false
 

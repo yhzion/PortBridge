@@ -15,7 +15,7 @@ final class FavoriteRowDisplayTests: XCTestCase {
         )
     }
 
-    // 핵심 회귀: offline 서버의 stale .active는 ● 아닌 ○ (기존 AppViewModelFavoritesTests:152 방어).
+    /// 핵심 회귀: offline 서버의 stale .active는 ● 아닌 ○ (기존 AppViewModelFavoritesTests:152 방어).
     func test_offlineActive_suppressedToInactive() {
         let d = row(state: .active, isOffline: true).display
         XCTAssertEqual(d.status, .inactive)
