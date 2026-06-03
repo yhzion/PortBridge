@@ -463,6 +463,31 @@ struct FavoriteRow: Identifiable, Equatable {
     let isOnlineConfirmed: Bool
 }
 
+extension FavoriteRow {
+    /// 즐겨찾기 행의 캐노니컬 표시 모델.
+    /// offline 서버는 stale `.active`라도 연결됨으로 보이면 안 되므로(ConnectTimeout 미설정 탓
+    /// 가짜 `.active` 가능 — `MenuBarController.isConnected`와 일관) status를 `.inactive`로 보정한다.
+    /// `isConnected`/`isDimmed` 로직 자체는 바꾸지 않고 그 결과만 status에 주입한다.
+    var display: ForwardingDisplay {
+        if isOffline {
+            return .inactive(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        }
+        switch state {
+        case .active:
+            if let localPort {
+                return .active(host: serverDisplayName, remotePort: remotePort, localPort: localPort, processName: processName)
+            }
+            return .inactive(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        case .starting:
+            return .starting(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        case let .error(message):
+            return .error(host: serverDisplayName, remotePort: remotePort, message: message, processName: processName)
+        case .idle:
+            return .inactive(host: serverDisplayName, remotePort: remotePort, processName: processName)
+        }
+    }
+}
+
 #if DEBUG
     extension AppViewModel {
         // Test-only helper to inject an active forwarding state.
