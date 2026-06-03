@@ -145,6 +145,7 @@ final class AppViewModel {
             let section = serverSections.first(where: { $0.server.id == key.serverId })
             let processName = section?.ports.first(where: { $0.port == key.remotePort })?.processName
             let isOffline = if case .offline = section?.scanState { true } else { false }
+            let isOnlineConfirmed = if case .loaded = section?.scanState { true } else { false }
             return FavoriteRow(
                 id: key,
                 serverDisplayName: server.displayName,
@@ -152,7 +153,8 @@ final class AppViewModel {
                 localPort: forwarding?.localPort,
                 processName: processName,
                 state: forwarding?.state ?? .idle,
-                isOffline: isOffline
+                isOffline: isOffline,
+                isOnlineConfirmed: isOnlineConfirmed
             )
         }
         .sorted { lhs, rhs in
@@ -437,6 +439,9 @@ struct FavoriteRow: Identifiable, Equatable {
     let processName: String?
     let state: Forwarding.State
     let isOffline: Bool
+    /// 서버의 마지막 스캔이 성공해 도달 가능함이 확정된 경우(`scanState == .loaded`).
+    /// 메뉴바는 이것이 false이고 신뢰 가능한 연결도 아닐 때 행을 흐리게 표시한다.
+    let isOnlineConfirmed: Bool
 }
 
 #if DEBUG

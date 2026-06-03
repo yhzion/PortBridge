@@ -114,6 +114,28 @@ final class AppViewModelFavoritesTests: XCTestCase {
         XCTAssertEqual(vm.favoriteRows.first?.isOffline, false, "isOffline must clear when the server comes back online")
     }
 
+    func test_favoriteRows_isOnlineConfirmed_onlyTrueWhenLoaded() {
+        let vm = makeViewModel()
+        let server = Server(name: "db-prod", user: "ubuntu", host: "10.0.0.1")
+        vm.addServer(server)
+        vm.toggleFavorite(serverId: server.id, port: 5432)
+        let section = vm.serverSections.first { $0.id == server.id }
+
+        // .loaded is the only state that confirms reachability.
+        section?._test_setScanState(.loaded([]))
+        XCTAssertEqual(vm.favoriteRows.first?.isOnlineConfirmed, true)
+
+        // Every non-loaded state leaves online unconfirmed → row dims in the menubar.
+        section?._test_setScanState(.scanning)
+        XCTAssertEqual(vm.favoriteRows.first?.isOnlineConfirmed, false)
+
+        section?._test_setScanState(.offline(isRetrying: false))
+        XCTAssertEqual(vm.favoriteRows.first?.isOnlineConfirmed, false)
+
+        section?._test_setScanState(.error("boom"))
+        XCTAssertEqual(vm.favoriteRows.first?.isOnlineConfirmed, false)
+    }
+
     func test_favoriteRows_offlineServer_isOfflineEvenWhenForwardingActive() {
         // Repro: an offline server can carry a stale/fake `.active` forwarding
         // (ssh hangs in TCP connect with no ConnectTimeout, passes the 2s grace).

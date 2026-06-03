@@ -15,6 +15,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var badgeLayer: CALayer?
 
+    /// 메뉴를 펼칠 때마다 즐겨찾기의 온라인 여부를 갱신하기 위한 스캔 스로틀.
+    /// 메뉴 표시는 동기지만 스캔은 async SSH(도달 불가 시 ~10초)이므로, 한 번 열 때
+    /// 보이는 것은 *직전* 스캔 결과이고 이번 스캔은 다음에 열 때 반영된다. throttle은
+    /// 연속해서 메뉴를 여닫을 때 전 서버를 반복 re-SSH하지 않도록 코얼레싱한다.
+    private var lastFavoritesScan: Date?
+    private static let menuScanThrottle: TimeInterval = 15
+
     init(viewModel: AppViewModel, onOpenMainWindow: @escaping () -> Void) {
         self.viewModel = viewModel
         self.onOpenMainWindow = onOpenMainWindow
@@ -59,6 +66,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // 메뉴를 다시 해제해 두지 않으면 다음 클릭에서 NSStatusItem이 자체 메뉴 표시 모드로 동작해
         // sendAction(on:)이 무시되어 우클릭 분기가 깨집니다.
         item.menu = nil
+    }
+
+    // MARK: - NSMenuDelegate
+
+    /// 메뉴가 열릴 때마다 즐겨찾기 서버의 온라인 여부를 갱신한다. 메인 창을 열어야만
+    /// 스캔되던 한계를 메우는 메뉴바 소유 스캔 트리거다. 스로틀로 연속 오픈 시 전 서버
+    /// 반복 re-SSH를 막는다. 이미 펼쳐진 NSMenu는 정적 스냅샷이라 이번 스캔 결과는
+    /// 다음에 열 때 반영된다(메뉴는 클릭마다 `buildMenu()`로 새로 그려짐).
+    func menuWillOpen(_ menu: NSMenu) {
+        let now = Date()
+        guard Self.shouldScan(now: now, last: lastFavoritesScan, throttle: Self.menuScanThrottle) else {
+            return
+        }
+        lastFavoritesScan = now
+        Task { @MainActor in await viewModel.scanAll() }
     }
 
     // MARK: - Menu construction
@@ -106,8 +128,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 item.target = self
                 item.representedObject = row
                 item.state = isConnected(row) ? .on : .off
-                if row.isOffline {
-                    // 오프라인 서버는 흐리게 — 클릭은 가능하게 유지(사용자가 stale 터널을 끌 수 있도록).
+                if isDimmed(row) {
+                    // 온라인이 확정되지 않았고 신뢰 가능한 연결도 아닌 서버는 흐리게 —
+                    // 클릭은 가능하게 유지(사용자가 stale 터널을 끄거나 재연결할 수 있도록).
                     item.attributedTitle = NSAttributedString(
                         string: favoriteTitle(for: row),
                         attributes: [.foregroundColor: NSColor.secondaryLabelColor]
@@ -225,6 +248,26 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// `.active`가 될 수 있어) 절대 연결됨으로 표시하지 않는다 — 메인 창의 오프라인 처리와 일관.
     private func isConnected(_ row: FavoriteRow) -> Bool {
         !row.isOffline && isActiveState(row.state)
+    }
+
+    /// 행을 흐리게(미확인/도달 불가) 표시할지 판정. 온라인이 확정(`isOnlineConfirmed`)되지
+    /// 않았고 신뢰 가능한 연결(`isConnected`)도 아닐 때만 흐리게 한다 — 즉 살아있는 터널이나
+    /// 스캔으로 도달 확인된 서버는 또렷하게 두고, `.idle`/`.scanning`/`.offline`/`.error` 등
+    /// 미확인 상태만 흐려진다. 숨기지 않으므로 사용자는 흐린 행도 클릭할 수 있다.
+    private func isDimmed(_ row: FavoriteRow) -> Bool {
+        Self.shouldDim(isOnlineConfirmed: row.isOnlineConfirmed, isConnected: isConnected(row))
+    }
+
+    /// 흐림 판정의 순수 로직(테스트용으로 분리). `MenuBarController.swift`의 진실 표를 잠근다.
+    static func shouldDim(isOnlineConfirmed: Bool, isConnected: Bool) -> Bool {
+        !isOnlineConfirmed && !isConnected
+    }
+
+    /// 메뉴를 펼칠 때 스캔을 다시 돌릴지 판정. `last`가 없으면(첫 오픈) 항상 스캔,
+    /// 그 외엔 마지막 스캔으로부터 `throttle`초가 지났을 때만 스캔한다.
+    static func shouldScan(now: Date, last: Date?, throttle: TimeInterval) -> Bool {
+        guard let last else { return true }
+        return now.timeIntervalSince(last) >= throttle
     }
 
     private func isActiveState(_ state: Forwarding.State) -> Bool {
