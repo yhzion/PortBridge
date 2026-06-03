@@ -20,7 +20,7 @@ jobs:
     name: macOS Swift parity (PortBridgeTests)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # macos runners ship cargo, but pin stable explicitly so build-ffi.sh
       # (which prepends ~/.cargo/bin) always resolves a toolchain.
@@ -76,7 +76,7 @@ jobs:
     name: FFI bindings (Linux, .so)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -118,13 +118,13 @@ jobs:
       run:
         working-directory: crates/portbridge-tauri
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
