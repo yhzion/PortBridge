@@ -69,4 +69,29 @@ nonisolated struct ForwardingDisplay: Equatable {
 
     /// 메뉴바 평문용 선행 표시.
     var statusDot: String { (status == .active || status == .starting) ? "●" : "○" }
+
+    /// VoiceOver용 음성 표현. 시각 `line`과 필드·순서는 같되 `→`/`·` 대신 단어를 쓴다.
+    var accessibilityText: String {
+        let proc: String
+        if let processName, !processName.isEmpty {
+            proc = ", \(processName)"
+        } else {
+            proc = ""
+        }
+        switch status {
+        case .active:
+            let local = localPort ?? 0
+            return String(localized: "forwardingDisplay.a11y.active",
+                          defaultValue: "\(host) 포트 \(remotePort), 로컬 \(local)으로 포워딩 중\(proc)")
+        case .starting:
+            return String(localized: "forwardingDisplay.a11y.starting",
+                          defaultValue: "\(host) 포트 \(remotePort), 포워딩 연결 중\(proc)")
+        case .error:
+            return String(localized: "forwardingDisplay.a11y.error",
+                          defaultValue: "\(host) 포트 \(remotePort), 포워딩 실패\(proc)")
+        case .inactive:
+            return String(localized: "forwardingDisplay.a11y.inactive",
+                          defaultValue: "\(host) 포트 \(remotePort)\(proc)")
+        }
+    }
 }

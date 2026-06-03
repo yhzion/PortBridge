@@ -64,4 +64,28 @@ final class ForwardingDisplayTests: XCTestCase {
         XCTAssertEqual(ForwardingDisplay.inactive(host: "1.2.3.4", remotePort: 1, processName: nil).line, "1.2.3.4:1")
         XCTAssertEqual(ForwardingDisplay.inactive(host: "myserver (1.2.3.4)", remotePort: 1, processName: nil).line, "myserver (1.2.3.4):1")
     }
+
+    // MARK: - accessibilityText (→/· 없는 단어형)
+
+    func test_accessibilityText_active_hasNoSymbols() {
+        let d = ForwardingDisplay.active(host: "myserver (1.2.3.4)", remotePort: 8080, localPort: 3000, processName: "nginx")
+        XCTAssertFalse(d.accessibilityText.contains("→"))
+        XCTAssertFalse(d.accessibilityText.contains("·"))
+        XCTAssertEqual(d.accessibilityText, "myserver (1.2.3.4) 포트 8080, 로컬 3000으로 포워딩 중, nginx")
+    }
+
+    func test_accessibilityText_inactive_withProcess() {
+        let d = ForwardingDisplay.inactive(host: "h", remotePort: 5432, processName: "postgres")
+        XCTAssertEqual(d.accessibilityText, "h 포트 5432, postgres")
+    }
+
+    func test_accessibilityText_starting() {
+        let d = ForwardingDisplay.starting(host: "h", remotePort: 22, processName: nil)
+        XCTAssertEqual(d.accessibilityText, "h 포트 22, 포워딩 연결 중")
+    }
+
+    func test_accessibilityText_error() {
+        let d = ForwardingDisplay.error(host: "h", remotePort: 3389, message: "boom", processName: nil)
+        XCTAssertEqual(d.accessibilityText, "h 포트 3389, 포워딩 실패")
+    }
 }
