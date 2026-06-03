@@ -45,11 +45,11 @@ impl fmt::Display for CommandError {
 
 impl Error for CommandError {}
 
-pub fn parse_ss(output: &str) -> Vec<RemotePort> {
+pub(crate) fn parse_ss(output: &str) -> Vec<RemotePort> {
     output.lines().filter_map(parse_ss_line).collect()
 }
 
-pub fn parse_lsof(output: &str) -> Vec<RemotePort> {
+pub(crate) fn parse_lsof(output: &str) -> Vec<RemotePort> {
     output
         .lines()
         .enumerate()
