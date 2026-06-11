@@ -41,6 +41,11 @@ extension Color {
         /// 카운트 배지 등 강조 표지의 배경.
         static let accentBadgeBg = Color.accentColor.opacity(0.14)
 
+        // MARK: - Row
+
+        /// 목록 행 hover 배경 — 무채색. 행 전체가 클릭 가능함을 알리는 어포던스.
+        static let rowHoverBg = Color.primary.opacity(0.05)
+
         // MARK: - Monogram
 
         /// ServerMonogram의 색상 변조 파라미터.

@@ -58,4 +58,23 @@ final class MenuBarControllerLogicTests: XCTestCase {
         let d = ForwardingDisplay.inactive(host: "h", remotePort: 5432, processName: nil)
         XCTAssertEqual(MenuBarController.menuTitle(for: d), "○ h:5432")
     }
+
+    // MARK: - batchToggleTitle (일괄 토글 메뉴 항목)
+
+    // toggleAll()의 실제 동작과 문구가 일치해야 한다:
+    // 활성 터널이 하나라도 있으면 전부(즐겨찾기 외 포함) 해제, 없으면 즐겨찾기만 연결.
+
+    func test_batchToggleTitle_anyActive_turnsOffAllForwardings() {
+        XCTAssertEqual(
+            MenuBarController.batchToggleTitle(activeCount: 3, favoriteCount: 5),
+            "모든 포워딩 끄기 (3개 활성)"
+        )
+    }
+
+    func test_batchToggleTitle_noneActive_connectsFavorites() {
+        XCTAssertEqual(
+            MenuBarController.batchToggleTitle(activeCount: 0, favoriteCount: 5),
+            "즐겨찾기 모두 연결 (5개)"
+        )
+    }
 }
