@@ -81,7 +81,15 @@ struct ForwardingRowView: View {
             }
         }
         .padding(.vertical, PBLayout.Space.s1)
-        .onHover { isRowHovering = $0 }
+        .background(
+            RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
+                .fill(isRowHovering ? Color.PB.rowHoverBg : .clear)
+        )
+        .onHover { hovering in
+            isRowHovering = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .animation(.easeOut(duration: 0.08), value: isRowHovering)
     }
 
     @ViewBuilder
@@ -90,16 +98,20 @@ struct ForwardingRowView: View {
             ProgressView()
                 .controlSize(.small)
         } else {
-            Image(systemName: statusSymbol.name)
-                .foregroundStyle(statusSymbol.color)
+            let symbol = Self.statusSymbol(for: display.status, isHovering: isRowHovering)
+            Image(systemName: symbol.name)
+                .foregroundStyle(symbol.color)
         }
     }
 
-    private var statusSymbol: (name: String, color: Color) {
-        switch display.status {
+    /// 상태 × hover → 심볼 매핑. inactive 행은 hover 시 ▶로 바뀌어
+    /// "클릭=연결" 어포던스를 제공한다. 순수 함수로 분리해 테스트 대상으로 노출.
+    static func statusSymbol(for status: ForwardingDisplay.Status, isHovering: Bool) -> (name: String, color: Color) {
+        switch status {
         case .active: return ("circle.fill", .green)
         case .error: return ("exclamationmark.triangle.fill", .red)
-        case .starting, .inactive: return ("circle", .secondary)
+        case .starting, .inactive:
+            return isHovering ? ("play.circle.fill", .accentColor) : ("circle", .secondary)
         }
     }
 }
