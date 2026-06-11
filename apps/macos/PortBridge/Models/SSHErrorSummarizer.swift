@@ -58,7 +58,7 @@ nonisolated enum SSHErrorSummarizer {
                     localized: "sshError.noRoute",
                     defaultValue: "서버에 도달할 수 없습니다 — 네트워크 경로를 확인하세요"
                 )
-            ),
+            )
         ]
     }
 
