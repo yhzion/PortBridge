@@ -77,4 +77,13 @@ final class MenuBarControllerLogicTests: XCTestCase {
             "즐겨찾기 모두 연결 (5개)"
         )
     }
+
+    // MARK: - updateAvailableTitle (업데이트 퍼널 메뉴 항목)
+
+    func test_updateAvailableTitle_includesTagAndDownloadAction() {
+        XCTAssertEqual(
+            MenuBarController.updateAvailableTitle(tagName: "v0.5.0"),
+            "PortBridge v0.5.0 사용 가능 — 다운로드…"
+        )
+    }
 }
