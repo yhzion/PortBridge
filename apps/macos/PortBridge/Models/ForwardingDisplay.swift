@@ -97,11 +97,6 @@ nonisolated struct ForwardingDisplay: Equatable {
         host + suffix
     }
 
-    /// 메뉴바 평문용 선행 표시.
-    var statusDot: String {
-        (status == .active || status == .starting) ? "●" : "○"
-    }
-
     /// VoiceOver용 음성 표현. 시각 `line`과 필드·순서는 같되 `→`/`·` 대신 단어를 쓴다.
     var accessibilityText: String {
         let proc = if let processName, !processName.isEmpty {

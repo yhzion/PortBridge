@@ -32,18 +32,6 @@ final class ForwardingDisplayTests: XCTestCase {
         XCTAssertEqual(d.errorMessage, "connection refused")
     }
 
-    // MARK: - statusDot
-
-    func test_statusDot_activeAndStarting_filled() {
-        XCTAssertEqual(ForwardingDisplay.active(host: "h", remotePort: 1, localPort: 1, processName: nil).statusDot, "●")
-        XCTAssertEqual(ForwardingDisplay.starting(host: "h", remotePort: 1, processName: nil).statusDot, "●")
-    }
-
-    func test_statusDot_errorAndInactive_hollow() {
-        XCTAssertEqual(ForwardingDisplay.error(host: "h", remotePort: 1, message: "x", processName: nil).statusDot, "○")
-        XCTAssertEqual(ForwardingDisplay.inactive(host: "h", remotePort: 1, processName: nil).statusDot, "○")
-    }
-
     // MARK: - invariants (factory가 타입으로 강제)
 
     func test_nonActiveFactories_haveNilLocalPort() {
