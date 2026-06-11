@@ -222,50 +222,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         openItem.target = self
         menu.addItem(openItem)
 
-        let launchItem = NSMenuItem(
-            title: String(localized: "menu.launchAtLogin", defaultValue: "로그인 시 시작"),
-            action: #selector(toggleLaunchAtLogin),
-            keyEquivalent: ""
+        // 설정류(로그인 시 시작·Dock·업데이트)는 Settings 씬(⌘,)으로 이전 —
+        // 메뉴는 즐겨찾기/Active/오류/열기/종료의 동작 표면으로 압축한다.
+        let settingsItem = NSMenuItem(
+            title: String(localized: "menu.settings", defaultValue: "설정…"),
+            action: #selector(openSettings),
+            keyEquivalent: ","
         )
-        launchItem.target = self
-        launchItem.state = viewModel.preferences.launchAtLogin ? .on : .off
-        menu.addItem(launchItem)
-
-        let dockItem = NSMenuItem(
-            title: String(localized: "menu.showInDock", defaultValue: "Dock에 표시"),
-            action: #selector(toggleShowInDock),
-            keyEquivalent: ""
-        )
-        dockItem.target = self
-        dockItem.state = viewModel.preferences.showInDock ? .on : .off
-        menu.addItem(dockItem)
-
-        let autoCheckItem = NSMenuItem(
-            title: String(localized: "menu.updates.autoCheck", defaultValue: "자동으로 업데이트 확인"),
-            action: #selector(toggleAutomaticUpdateCheck),
-            keyEquivalent: ""
-        )
-        autoCheckItem.target = self
-        autoCheckItem.state = viewModel.preferences.automaticUpdateCheckEnabled ? .on : .off
-        menu.addItem(autoCheckItem)
-
-        let checkNowItem: NSMenuItem
-        if case .checking = viewModel.updates.phase {
-            checkNowItem = NSMenuItem(
-                title: String(localized: "menu.updates.checking", defaultValue: "확인 중…"),
-                action: nil,
-                keyEquivalent: ""
-            )
-            checkNowItem.isEnabled = false
-        } else {
-            checkNowItem = NSMenuItem(
-                title: String(localized: "menu.updates.checkNow", defaultValue: "지금 업데이트 확인…"),
-                action: #selector(checkForUpdatesNow),
-                keyEquivalent: ""
-            )
-        }
-        checkNowItem.target = self
-        menu.addItem(checkNowItem)
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
         menu.addItem(.separator())
 
@@ -282,8 +247,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     /// 메뉴 항목 평문 타이틀의 단일 출처. `buildMenu`/`favoriteTitle`이 private라
     /// 직접 테스트가 불가하므로 순수 함수로 분리해 테스트 대상으로 노출한다.
+    /// 상태는 NSMenuItem.state(체크마크)와 ⚠ 이미지가 전담한다 — ●/○ 텍스트 글리프를
+    /// 함께 쓰면 상태가 이중 인코딩되고 VoiceOver가 매 항목 'black circle'을 먼저 읽는다.
     static func menuTitle(for display: ForwardingDisplay) -> String {
-        "\(display.statusDot) \(display.line)"
+        display.line
     }
 
     /// 업데이트 가능 메뉴 항목 타이틀. 순수 함수로 분리해 테스트 대상으로 노출.
@@ -367,12 +334,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    @objc private func toggleLaunchAtLogin() {
-        viewModel.preferences.launchAtLogin.toggle()
-    }
-
-    @objc private func toggleShowInDock() {
-        viewModel.preferences.showInDock.toggle()
+    @objc private func openSettings() {
+        // 메뉴 트래킹(.eventTracking) 중에는 윈도우 표시가 삼켜진다 — openMainWindow와
+        // 같은 이유로 .default 모드에서 실행되도록 예약한다.
+        RunLoop.current.perform(inModes: [.default]) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
     }
 
     @objc private func openMainWindow() {
@@ -387,16 +355,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-
-    @objc private func toggleAutomaticUpdateCheck() {
-        viewModel.preferences.automaticUpdateCheckEnabled.toggle()
-    }
-
-    @objc private func checkForUpdatesNow() {
-        Task { @MainActor in
-            await viewModel.updates.checkNow(manual: true)
-        }
     }
 
     // MARK: - Icon observation

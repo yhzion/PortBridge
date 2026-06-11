@@ -11,7 +11,8 @@ struct PortBridgeApp: App {
         // (.defaultLaunchBehavior(.suppressed)로도 막히지 않음 — 진단으로 확인) 포커스
         // 경쟁을 일으키므로, 자동 창을 만들지 않는 Settings 씬만 둔다.
         Settings {
-            EmptyView()
+            SettingsView()
+                .environment(delegate.viewModel)
         }
     }
 }
