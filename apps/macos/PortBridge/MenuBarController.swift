@@ -136,6 +136,17 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 item.target = self
                 item.representedObject = row
                 item.state = isConnected(row) ? .on : .off
+                if case .error = row.state {
+                    // 런타임 사망(.error)을 ○(꺼짐)과 구분 — 메인 윈도우가 닫혀 있어도
+                    // 메뉴에서 실패를 알아챌 수 있게 한다.
+                    item.image = NSImage(
+                        systemSymbolName: "exclamationmark.triangle.fill",
+                        accessibilityDescription: String(
+                            localized: "menu.favorite.error.a11y",
+                            defaultValue: "포워딩 실패"
+                        )
+                    )
+                }
                 if isDimmed(row) {
                     // 온라인이 확정되지 않았고 신뢰 가능한 연결도 아닌 서버는 흐리게 —
                     // 클릭은 가능하게 유지(사용자가 stale 터널을 끄거나 재연결할 수 있도록).

@@ -139,6 +139,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
 
+    /// 활성 터널이 있을 때 무확인 종료를 막는다 — 종료는 살아있는 SSH 세션(DB, 디버깅 등)을
+    /// 전부 끊는 파괴적 동작이라 한 번 확인을 거친다.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if Self.isRunningUnderTest { return .terminateNow }
+        let activeCount = MainActor.assumeIsolated {
+            viewModel.forwardings.count { fw in
+                switch fw.state {
+                case .active, .starting: return true
+                case .idle, .error: return false
+                }
+            }
+        }
+        guard Self.shouldConfirmTermination(activeCount: activeCount) else { return .terminateNow }
+
+        let alert = NSAlert()
+        alert.messageText = String(
+            localized: "terminate.confirm.title",
+            defaultValue: "활성 포워딩 \(activeCount)개가 실행 중입니다"
+        )
+        alert.informativeText = String(
+            localized: "terminate.confirm.message",
+            defaultValue: "종료하면 모든 SSH 터널이 끊어집니다."
+        )
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: String(localized: "terminate.confirm.quit", defaultValue: "종료"))
+        alert.addButton(withTitle: String(localized: "terminate.confirm.cancel", defaultValue: "취소"))
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    /// 종료 확인이 필요한지의 순수 판정 — 테스트 대상으로 노출.
+    static func shouldConfirmTermination(activeCount: Int) -> Bool {
+        activeCount > 0
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
             viewModel.shutdownAll()
