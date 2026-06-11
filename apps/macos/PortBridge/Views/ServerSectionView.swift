@@ -62,7 +62,7 @@ struct ServerSectionView: View {
     private var statusDot: ServerStatusDot {
         switch section.scanState {
         case .offline(let isRetrying): return .offline(pulse: isRetrying)
-        case .toolMissing, .authFailed: return .warning
+        case .toolMissing, .authFailed, .hostKeyFailed: return .warning
         case .loaded: return .online
         default: return .none
         }
@@ -119,6 +119,9 @@ struct ServerSectionView: View {
 
         case .authFailed(let cmd):
             AuthFailedView(copyCommand: cmd) { Task { await section.scan() } }
+
+        case .hostKeyFailed(let cmd):
+            HostKeyFailedView(copyCommand: cmd)
         }
     }
 
@@ -338,7 +341,6 @@ private struct StatusDot: View {
 private struct AuthFailedView: View {
     let copyCommand: String
     let onRetry: () -> Void
-    @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
@@ -348,39 +350,78 @@ private struct AuthFailedView: View {
             )
             .font(.caption)
             .foregroundStyle(.orange)
-            HStack(spacing: PBLayout.Space.s2) {
-                Text(verbatim: copyCommand)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-
-                Spacer(minLength: 0)
-
-                Button(action: copy) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .font(.caption)
-                        .foregroundStyle(copied ? Color.green : Color.secondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .buttonStyle(.plain)
-                .help(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
-                    localized: "common.copy",
-                    defaultValue: "복사"
-                ))
-                .accessibilityLabel(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
-                    localized: "server.section.authFailed.copyCommand.accessibility",
-                    defaultValue: "명령 복사"
-                ))
-            }
+            CopyCommandRow(command: copyCommand)
         }
         .padding(.vertical, PBLayout.Space.s1)
+    }
+}
+
+/// 호스트 키 검증 실패 — 보안 관련이라 오프라인과 구분되는 전용 안내.
+/// 원인 설명 + known_hosts 키 제거 명령을 제공하되, 무조건적 우회
+/// (StrictHostKeyChecking 비활성화)는 절대 권하지 않는다.
+private struct HostKeyFailedView: View {
+    let copyCommand: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PBLayout.Space.s2) {
+            Label(
+                String(localized: "server.section.hostKeyFailed.title", defaultValue: "호스트 키 검증 실패"),
+                systemImage: "exclamationmark.shield"
+            )
+            .font(.caption)
+            .foregroundStyle(.red)
+
+            Text(String(
+                localized: "server.section.hostKeyFailed.explanation",
+                defaultValue: "서버의 호스트 키가 변경되었거나 첫 연결입니다. 서버를 재설치하지 않았다면 중간자 공격 가능성을 먼저 확인하세요. 키 변경이 정상이라면 아래 명령으로 기존 키를 제거한 뒤 다시 스캔하세요."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            CopyCommandRow(command: copyCommand)
+        }
+        .padding(.vertical, PBLayout.Space.s1)
+    }
+}
+
+/// 복사 가능한 복구 명령 행 — AuthFailedView/HostKeyFailedView가 공유.
+private struct CopyCommandRow: View {
+    let command: String
+    @State private var copied = false
+
+    var body: some View {
+        HStack(spacing: PBLayout.Space.s2) {
+            Text(verbatim: command)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            Spacer(minLength: 0)
+
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.caption)
+                    .foregroundStyle(copied ? Color.green : Color.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .help(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
+                localized: "common.copy",
+                defaultValue: "복사"
+            ))
+            .accessibilityLabel(copied ? String(localized: "common.copied", defaultValue: "복사됨") : String(
+                localized: "server.section.authFailed.copyCommand.accessibility",
+                defaultValue: "명령 복사"
+            ))
+        }
     }
 
     private func copy() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(copyCommand, forType: .string)
+        NSPasteboard.general.setString(command, forType: .string)
         withAnimation { copied = true }
         Task {
             try? await Task.sleep(nanoseconds: 1_800_000_000)

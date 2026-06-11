@@ -43,6 +43,35 @@ final class ServerSectionViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func test_scan_hostKeyVerificationFailed_setsHostKeyFailed_notOffline() async {
+        let mock = MockFfiCommandRunner(responses: [
+            CommandResultDto(exitCode: 255, stdout: "", stderr: "Host key verification failed.")
+        ])
+        let vm = ServerSectionViewModel(server: makeServer(), scanner: PortScanner(runner: mock))
+        await vm.scan()
+        guard case .hostKeyFailed(let cmd) = vm.scanState else {
+            XCTFail("expected .hostKeyFailed, got \(vm.scanState)"); return
+        }
+        XCTAssertEqual(cmd, "ssh-keygen -R 10.0.0.1")
+    }
+
+    @MainActor
+    func test_hostKeyResetCommand_standardPort_usesBareHost() {
+        XCTAssertEqual(
+            ServerSectionViewModel.hostKeyResetCommand(host: "10.0.0.1", port: 22),
+            "ssh-keygen -R 10.0.0.1"
+        )
+    }
+
+    @MainActor
+    func test_hostKeyResetCommand_customPort_usesBracketedEntry() {
+        XCTAssertEqual(
+            ServerSectionViewModel.hostKeyResetCommand(host: "10.0.0.1", port: 2222),
+            "ssh-keygen -R '[10.0.0.1]:2222'"
+        )
+    }
+
+    @MainActor
     func test_scan_connectTimeout_setsOffline() async {
         let mock = MockFfiCommandRunner(responses: [
             CommandResultDto(exitCode: 255, stdout: "", stderr: "Connection timed out")
