@@ -253,7 +253,7 @@ final class AppViewModel {
         }
     }
 
-    // MARK: - Menu bar (right-click toggle)
+    // MARK: - Menu bar (batch toggle)
 
     /// 메뉴바 아이콘이 "ON" 상태로 보일지 결정하는 파생 상태.
     /// 즐겨찾기 중 하나라도 active 또는 starting 이면 true.
@@ -266,7 +266,7 @@ final class AppViewModel {
         }
     }
 
-    /// 메뉴바 우클릭 핸들러 — 모든 즐겨찾기를 일괄 토글 (Amphetamine 패턴).
+    /// 메뉴바 "모든 즐겨찾기 켜기/끄기" 메뉴 항목 액션 — 모든 즐겨찾기를 일괄 토글.
     ///
     /// 규칙:
     /// - 하나라도 ON (isAnyFavoriteActive == true)  → 전부 OFF

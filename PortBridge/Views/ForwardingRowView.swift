@@ -18,11 +18,13 @@ struct ForwardingRowView: View {
         return false
     }
 
-    private var statusSymbol: (name: String, color: Color) {
-        switch forwarding?.state {
+    /// 상태 × hover → 심볼 매핑. idle 행은 hover 시 ▶로 바뀌어 "클릭=연결" 어포던스를 제공합니다.
+    static func statusSymbol(for state: Forwarding.State?, isHovering: Bool) -> (name: String, color: Color) {
+        switch state {
         case .active: return ("circle.fill", .green)
         case .error: return ("exclamationmark.triangle.fill", .red)
-        case .starting, .idle, .none: return ("circle", .secondary)
+        case .starting, .idle, .none:
+            return isHovering ? ("play.circle.fill", .accentColor) : ("circle", .secondary)
         }
     }
 
@@ -44,7 +46,7 @@ struct ForwardingRowView: View {
             return "\(serverPrefix)포워딩 연결 중…"
         case .active:
             if let local = forwarding?.localPort {
-                return "→ :\(local) 포워딩 중"
+                return "\(serverPrefix)→ :\(local) 포워딩 중"
             }
             return "\(serverPrefix)포워딩 중"
         case .error:
@@ -119,7 +121,15 @@ struct ForwardingRowView: View {
             }
         }
         .padding(.vertical, PBLayout.Space.s1)
-        .onHover { isRowHovering = $0 }
+        .background(
+            RoundedRectangle(cornerRadius: PBLayout.Radius.sm, style: .continuous)
+                .fill(isRowHovering ? Color.PB.rowHoverBg : .clear)
+        )
+        .onHover { hovering in
+            isRowHovering = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .animation(.easeOut(duration: 0.08), value: isRowHovering)
     }
 
     private var rightPrimary: String {
@@ -152,8 +162,9 @@ struct ForwardingRowView: View {
             ProgressView()
                 .controlSize(.small)
         } else {
-            Image(systemName: statusSymbol.name)
-                .foregroundStyle(statusSymbol.color)
+            let symbol = Self.statusSymbol(for: forwarding?.state, isHovering: isRowHovering)
+            Image(systemName: symbol.name)
+                .foregroundStyle(symbol.color)
         }
     }
 }

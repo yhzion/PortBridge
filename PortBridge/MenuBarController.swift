@@ -2,10 +2,11 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// 메뉴바 아이콘 + 클릭 분기 관리자.
+/// 메뉴바 아이콘 + 메뉴 관리자.
 ///
-/// - 좌클릭: 표준 NSMenu 표시 (즐겨찾기 / Active / Errors / 환경설정 / Quit)
-/// - 우클릭: 즐겨찾기 일괄 토글 (Amphetamine 패턴)
+/// 좌클릭·우클릭 모두 표준 NSMenu 표시 (즐겨찾기 / Active / Errors / 환경설정 / Quit).
+/// 즐겨찾기 일괄 토글은 메뉴 항목으로 제공됩니다 — 우클릭 즉시 토글(구 Amphetamine 패턴)은
+/// 발견 불가능하고 확인·피드백 없이 활성 터널을 끊는 문제로 제거됨.
 ///
 /// 아이콘은 isAnyFavoriteActive 파생 상태가 바뀔 때마다 자동 갱신됩니다.
 @MainActor
@@ -38,15 +39,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // MARK: - Click routing
 
     @objc private func handleClick(_ sender: Any?) {
-        let type = NSApp.currentEvent?.type
-        switch type {
-        case .rightMouseUp:
-            Task { await viewModel.toggleAllFavorites() }
-        case .leftMouseUp:
-            presentMenu()
-        default:
-            presentMenu()
-        }
+        presentMenu()
     }
 
     private func presentMenu() {
@@ -55,7 +48,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         item.menu = menu
         button.performClick(nil)
         // 메뉴를 다시 해제해 두지 않으면 다음 클릭에서 NSStatusItem이 자체 메뉴 표시 모드로 동작해
-        // sendAction(on:)이 무시되어 우클릭 분기가 깨집니다.
+        // sendAction(on:)이 무시되어 매 클릭마다 메뉴를 새로 구성하는 동작이 깨집니다.
         item.menu = nil
     }
 
@@ -78,14 +71,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         // Favorites
-        let favHeader = NSMenuItem(title: "Favorites", action: nil, keyEquivalent: "")
+        let favHeader = NSMenuItem(title: L10n.MenuBar.favorites, action: nil, keyEquivalent: "")
         favHeader.isEnabled = false
         menu.addItem(favHeader)
 
         let rows = viewModel.favoriteRows
         if rows.isEmpty {
             let hint = NSMenuItem(
-                title: "메인 창에서 ★를 눌러 즐겨찾기를 추가하세요",
+                title: L10n.MenuBar.emptyFavoritesHint,
                 action: nil,
                 keyEquivalent: ""
             )
@@ -103,13 +96,23 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 item.state = isActiveState(row.state) ? .on : .off
                 menu.addItem(item)
             }
+
+            // 구 우클릭 즉시 토글을 대체하는 가시적 일괄 토글.
+            let activeCount = rows.filter { isActiveState($0.state) }.count
+            let batchItem = NSMenuItem(
+                title: L10n.MenuBar.batchToggleTitle(activeCount: activeCount, total: rows.count),
+                action: #selector(toggleAllFavorites),
+                keyEquivalent: ""
+            )
+            batchItem.target = self
+            menu.addItem(batchItem)
         }
 
         // Active (non-favorite)
         let actives = viewModel.nonFavoriteActive
         if !actives.isEmpty {
             menu.addItem(.separator())
-            let activeHeader = NSMenuItem(title: "Active", action: nil, keyEquivalent: "")
+            let activeHeader = NSMenuItem(title: L10n.MenuBar.active, action: nil, keyEquivalent: "")
             activeHeader.isEnabled = false
             menu.addItem(activeHeader)
             for fw in actives {
@@ -129,8 +132,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         if !viewModel.errors.isEmpty {
             menu.addItem(.separator())
             let count = viewModel.errors.count
-            let title = "\(count) error\(count == 1 ? "" : "s")"
-            let item = NSMenuItem(title: title, action: #selector(openMainWindow), keyEquivalent: "")
+            let item = NSMenuItem(
+                title: L10n.MenuBar.errorCount(count),
+                action: #selector(openMainWindow),
+                keyEquivalent: ""
+            )
             item.target = self
             item.image = NSImage(
                 systemSymbolName: "exclamationmark.triangle.fill",
@@ -142,7 +148,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let openItem = NSMenuItem(
-            title: "Open Main Window",
+            title: L10n.MenuBar.openMainWindow,
             action: #selector(openMainWindow),
             keyEquivalent: "o"
         )
@@ -150,7 +156,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(openItem)
 
         let launchItem = NSMenuItem(
-            title: "Launch at Login",
+            title: L10n.MenuBar.launchAtLogin,
             action: #selector(toggleLaunchAtLogin),
             keyEquivalent: ""
         )
@@ -159,7 +165,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(launchItem)
 
         let dockItem = NSMenuItem(
-            title: "Show in Dock",
+            title: L10n.MenuBar.showInDock,
             action: #selector(toggleShowInDock),
             keyEquivalent: ""
         )
@@ -168,7 +174,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(dockItem)
 
         let autoCheckItem = NSMenuItem(
-            title: "Check for Updates Automatically",
+            title: L10n.MenuBar.checkUpdatesAutomatically,
             action: #selector(toggleAutomaticUpdateCheck),
             keyEquivalent: ""
         )
@@ -178,11 +184,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         let checkNowItem: NSMenuItem
         if case .checking = viewModel.updates.phase {
-            checkNowItem = NSMenuItem(title: "Checking…", action: nil, keyEquivalent: "")
+            checkNowItem = NSMenuItem(title: L10n.MenuBar.checking, action: nil, keyEquivalent: "")
             checkNowItem.isEnabled = false
         } else {
             checkNowItem = NSMenuItem(
-                title: "Check for Updates Now…",
+                title: L10n.MenuBar.checkUpdatesNow,
                 action: #selector(checkForUpdatesNow),
                 keyEquivalent: ""
             )
@@ -193,7 +199,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit PortBridge",
+            title: L10n.MenuBar.quit,
             action: #selector(quit),
             keyEquivalent: "q"
         )
@@ -217,6 +223,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     // MARK: - Menu actions
+
+    @objc private func toggleAllFavorites() {
+        Task { await viewModel.toggleAllFavorites() }
+    }
 
     @objc private func toggleFavoriteRow(_ sender: NSMenuItem) {
         guard let row = sender.representedObject as? FavoriteRow else { return }

@@ -17,6 +17,11 @@ final class RemotePortTests: XCTestCase {
         XCTAssertEqual(p.displayLine, ":8000 · 모든 인터페이스 · vllm")
     }
 
+    func test_scopeLabel_normalizesWildcardAddress() {
+        let p = RemotePort(port: 3389, address: "*", processName: nil)
+        XCTAssertEqual(p.scopeLabel, "모든 인터페이스")
+    }
+
     func test_displayLine_omitsMissingProcessName() {
         let p = RemotePort(port: 8000, address: "127.0.0.1", processName: nil)
         XCTAssertEqual(p.displayLine, ":8000 · 로컬 전용")
