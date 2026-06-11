@@ -15,7 +15,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let viewModel: AppViewModel
     private let onOpenMainWindow: () -> Void
     private var statusItem: NSStatusItem?
-    private var badgeLayer: CALayer?
 
     /// 메뉴를 펼칠 때마다 즐겨찾기의 온라인 여부를 갱신하기 위한 스캔 스로틀.
     /// 메뉴 표시는 동기지만 스캔은 async SSH(도달 불가 시 ~10초)이므로, 한 번 열 때
@@ -36,14 +35,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem = item
 
         if let button = item.button {
-            button.image = MenuBarIconRenderer.image(active: viewModel.isAnyForwardingActive)
             button.target = self
             button.action = #selector(handleClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
+        refreshIcon()
         observeIconState()
-        updateBadge(visible: viewModel.updates.availableUpdate != nil)
     }
 
     // MARK: - Click routing
@@ -93,6 +91,18 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         )
         versionItem.isEnabled = false
         menu.addItem(versionItem)
+
+        // 업데이트 퍼널 — 배지가 알린 업데이트를 메뉴 안에서 바로 받을 수 있게 한다.
+        if let release = viewModel.updates.availableUpdate {
+            let updateItem = NSMenuItem(
+                title: Self.updateAvailableTitle(tagName: release.tagName),
+                action: #selector(downloadUpdate),
+                keyEquivalent: ""
+            )
+            updateItem.target = self
+            menu.addItem(updateItem)
+        }
+
         menu.addItem(.separator())
 
         // Favorites
@@ -263,6 +273,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         "\(display.statusDot) \(display.line)"
     }
 
+    /// 업데이트 가능 메뉴 항목 타이틀. 순수 함수로 분리해 테스트 대상으로 노출.
+    static func updateAvailableTitle(tagName: String) -> String {
+        String(localized: "menu.update.available", defaultValue: "PortBridge \(tagName) 사용 가능 — 다운로드…")
+    }
+
     /// 일괄 토글 메뉴 항목 타이틀. `toggleAll()`의 동작(활성 있으면 전부 해제,
     /// 없으면 즐겨찾기만 연결)과 문구가 일치하도록 같은 판정 기준을 받는다.
     static func batchToggleTitle(activeCount: Int, favoriteCount: Int) -> String {
@@ -312,6 +327,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func toggleAllForwardings() {
         Task { await viewModel.toggleAll() }
+    }
+
+    @objc private func downloadUpdate() {
+        guard let release = viewModel.updates.availableUpdate else { return }
+        NSWorkspace.shared.open(release.htmlURL)
     }
 
     @objc private func toggleFavoriteRow(_ sender: NSMenuItem) {
@@ -377,41 +397,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 refreshIcon()
-                updateBadge(visible: viewModel.updates.availableUpdate != nil)
                 observeIconState()
             }
         }
     }
 
     private func refreshIcon() {
-        let active = viewModel.isAnyForwardingActive
-        statusItem?.button?.image = MenuBarIconRenderer.image(active: active)
-    }
-
-    private func updateBadge(visible: Bool) {
-        guard let button = statusItem?.button else { return }
-        if visible {
-            if badgeLayer == nil {
-                button.wantsLayer = true
-                let layer = CALayer()
-                layer.backgroundColor = NSColor.systemBlue.cgColor
-                layer.cornerRadius = 2
-                button.layer?.addSublayer(layer)
-                badgeLayer = layer
-            }
-            layoutBadge()
-        } else {
-            badgeLayer?.removeFromSuperlayer()
-            badgeLayer = nil
-        }
-    }
-
-    private func layoutBadge() {
-        guard let button = statusItem?.button, let layer = badgeLayer else { return }
-        let size: CGFloat = 4
-        let inset: CGFloat = 1
-        let x = button.bounds.maxX - size - inset
-        let y = button.bounds.maxY - size - inset
-        layer.frame = CGRect(x: x, y: y, width: size, height: size)
+        statusItem?.button?.image = MenuBarIconRenderer.image(
+            active: viewModel.isAnyForwardingActive,
+            badged: viewModel.updates.availableUpdate != nil
+        )
     }
 }
