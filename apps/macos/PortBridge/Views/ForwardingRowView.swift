@@ -21,6 +21,11 @@ struct ForwardingRowView: View {
 
     @State private var isRowHovering = false
 
+    private var errorSummary: String? {
+        guard isErrorState, let message = display.errorMessage else { return nil }
+        return SSHErrorSummarizer.summary(for: message)
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Button(action: onFavoriteToggle) {
@@ -43,17 +48,29 @@ struct ForwardingRowView: View {
                     statusIndicator
                         .frame(width: 18, height: 18)
 
-                    HStack(spacing: 0) {
-                        Text(display.host)
-                            .truncationMode(.middle)
-                            .lineLimit(1)
-                            .layoutPriority(1)
-                        Text(display.suffix)
-                            .lineLimit(1)
-                            .layoutPriority(2)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 0) {
+                            Text(display.host)
+                                .truncationMode(.middle)
+                                .lineLimit(1)
+                                .layoutPriority(1)
+                            Text(display.suffix)
+                                .lineLimit(1)
+                                .layoutPriority(2)
+                        }
+                        .font(.system(.body, design: .monospaced))
+                        .monospacedDigit()
+
+                        // 실패 사유를 hover 툴팁에 가두지 않고 인라인으로 노출 —
+                        // 원문 stderr는 우측 info 아이콘 툴팁에 보존된다.
+                        if let errorSummary {
+                            Text(errorSummary)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     }
-                    .font(.system(.body, design: .monospaced))
-                    .monospacedDigit()
 
                     Spacer(minLength: 4)
                 }
@@ -65,7 +82,9 @@ struct ForwardingRowView: View {
                 ? String(localized: "forwarding.row.toggle.helpStop", defaultValue: "클릭해 포워딩 끄기")
                 : String(localized: "forwarding.row.toggle.helpStart", defaultValue: "클릭해 포워딩 켜기"))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(display.accessibilityText)
+            .accessibilityLabel(
+                errorSummary.map { "\(display.accessibilityText), \($0)" } ?? display.accessibilityText
+            )
             .accessibilityHint(isActive
                 ? String(localized: "forwarding.row.toggle.a11yHintStop", defaultValue: "이중 탭하여 포워딩 끄기")
                 : String(localized: "forwarding.row.toggle.a11yHintStart", defaultValue: "이중 탭하여 포워딩 켜기"))
