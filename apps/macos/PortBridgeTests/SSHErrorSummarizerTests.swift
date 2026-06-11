@@ -75,6 +75,23 @@ final class SSHErrorSummarizerTests: XCTestCase {
         )
     }
 
+    // MARK: - isHostKeyFailure (보안 관련 — 오프라인으로 위장되면 안 됨)
+
+    func test_isHostKeyFailure_verificationFailed() {
+        XCTAssertTrue(SSHErrorSummarizer.isHostKeyFailure("Host key verification failed."))
+    }
+
+    func test_isHostKeyFailure_identificationChanged() {
+        XCTAssertTrue(
+            SSHErrorSummarizer.isHostKeyFailure("@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@")
+        )
+    }
+
+    func test_isHostKeyFailure_falseForOrdinaryNetworkError() {
+        XCTAssertFalse(SSHErrorSummarizer.isHostKeyFailure("Connection refused"))
+        XCTAssertFalse(SSHErrorSummarizer.isHostKeyFailure("Connection timed out"))
+    }
+
     // MARK: - 폴백
 
     func test_summary_unknownPattern_fallsBackToFirstNonEmptyLine() {

@@ -7,6 +7,19 @@ import Foundation
 nonisolated enum SSHErrorSummarizer {
     private static let fallbackLimit = 120
 
+    /// 호스트 키 검증 실패 패턴 — 요약 rules와 `isHostKeyFailure`가 공유한다.
+    private static let hostKeyPatterns = [
+        "host key verification failed",
+        "remote host identification has changed"
+    ]
+
+    /// 보안 관련 실패인지 판정. 호스트 키 실패는 일반 네트워크 오류(오프라인)로
+    /// 위장되면 안 되므로 호출 측이 전용 상태로 분기할 때 쓴다.
+    static func isHostKeyFailure(_ raw: String) -> Bool {
+        let lowered = raw.lowercased()
+        return hostKeyPatterns.contains(where: lowered.contains)
+    }
+
     /// (패턴, 요약) 순서 유지 — 위에서부터 첫 매치가 이긴다.
     private static var rules: [(patterns: [String], summary: String)] {
         [
@@ -18,7 +31,7 @@ nonisolated enum SSHErrorSummarizer {
                 )
             ),
             (
-                ["host key verification failed", "remote host identification has changed"],
+                hostKeyPatterns,
                 String(
                     localized: "sshError.hostKeyVerificationFailed",
                     defaultValue: "호스트 키 검증에 실패했습니다 — known_hosts의 키 변경 여부를 확인하세요"
