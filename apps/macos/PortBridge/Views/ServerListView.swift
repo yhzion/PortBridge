@@ -220,6 +220,14 @@ struct ServerListView: View {
                 TextField(String(localized: "serverList.searchPlaceholder", defaultValue: "포트 번호나 프로세스 이름으로 찾기"), text: $vm.searchText)
                     .textFieldStyle(.plain)
                     .focused($isSearchFocused)
+                    .onSubmit {
+                        // 결과가 1개로 좁혀졌으면 Enter로 즉시 연결 — 타이핑→Enter 플로우.
+                        Task { await vm.submitSearch() }
+                    }
+                    .onExitCommand {
+                        vm.searchText = ""
+                        isSearchFocused = false
+                    }
                     .controlSize(.small)
                     .padding(.horizontal, 7)
                     .padding(.vertical, PBLayout.Space.s1)
@@ -273,6 +281,13 @@ struct ServerListView: View {
             .help(String(localized: "serverList.addServer.help", defaultValue: "서버 추가 (⌘N)"))
             .accessibilityLabel(String(localized: "serverList.addServer", defaultValue: "서버 추가"))
             .keyboardShortcut("n", modifiers: .command)
+
+            // ⌘F → 검색 포커스. 보이지 않는 버튼으로 단축키만 노출하는 기존 관용구(⌘R/⌘N과 동일 계열).
+            Button("") { isSearchFocused = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .buttonStyle(.plain)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, PBLayout.Space.s3)
         .padding(.vertical, PBLayout.Space.s2)

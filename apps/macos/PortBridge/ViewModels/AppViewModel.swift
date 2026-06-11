@@ -60,6 +60,24 @@ final class AppViewModel {
         return false
     }
 
+    /// 검색 결과가 전 서버를 통틀어 정확히 1개일 때 그 포트를 반환.
+    /// 검색창 Return의 "타이핑 → Enter → 연결" 커맨드 팔레트형 플로우를 받친다.
+    func singleSearchMatch() -> (serverId: UUID, port: RemotePort)? {
+        guard !normalizedSearchQuery.isEmpty else { return nil }
+        let all = serverSections.flatMap { section in
+            section.ports.filter { matches($0) }.map { (serverId: section.server.id, port: $0) }
+        }
+        guard all.count == 1 else { return nil }
+        return all.first
+    }
+
+    /// 검색창 Return 핸들러 — 결과가 1개로 좁혀졌을 때만 토글한다.
+    /// 여러 개일 때 아무것도 하지 않는 것은 의도: 임의의 항목을 연결하는 추측 동작을 피한다.
+    func submitSearch() async {
+        guard let match = singleSearchMatch() else { return }
+        await toggleForwarding(serverId: match.serverId, for: match.port)
+    }
+
     private static func normalize(_ string: String) -> String {
         string.trimmingCharacters(in: .whitespaces).lowercased()
     }

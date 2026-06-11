@@ -212,10 +212,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // keyEquivalent를 비워둔다 — 메뉴가 열려 있을 때만 동작하는 단축키를
+        // ⌘O로 표기하면 전역 핫키로 오인되고, ⌘O는 '파일 열기'에 예약된 의미다.
         let openItem = NSMenuItem(
             title: String(localized: "menu.openMainWindow", defaultValue: "메인 창 열기"),
             action: #selector(openMainWindow),
-            keyEquivalent: "o"
+            keyEquivalent: ""
         )
         openItem.target = self
         menu.addItem(openItem)
