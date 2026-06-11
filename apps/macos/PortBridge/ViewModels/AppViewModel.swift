@@ -26,6 +26,7 @@ final class AppViewModel {
     let favorites: FavoriteStore
     let preferences: AppPreferences
     let updates: UpdateChecker
+    private let notifier: UserNotifying
     var searchText: String = "" {
         didSet { normalizedSearchQuery = Self.normalize(searchText) }
     }
@@ -80,12 +81,14 @@ final class AppViewModel {
         tunnels: TunnelManaging? = nil,
         favorites: FavoriteStore? = nil,
         preferences: AppPreferences? = nil,
-        updates: UpdateChecker? = nil
+        updates: UpdateChecker? = nil,
+        notifier: UserNotifying? = nil
     ) {
         self.store = store ?? ServerStore()
         self.scanner = scanner ?? PortScanner(runner: BlockingProcessRunner())
         let manager: TunnelManaging = tunnels ?? TunnelManager()
         self.tunnels = manager
+        self.notifier = notifier ?? UserNotificationCenterNotifier()
         self.favorites = favorites ?? FavoriteStore()
         self.preferences = preferences ?? AppPreferences.production()
         let resolvedPrefs = self.preferences
@@ -443,9 +446,16 @@ struct PortConflict: Identifiable, Equatable {
 extension AppViewModel: TunnelManagerDelegate {
     nonisolated func tunnelDidExit(id: UUID, stderr: String) async {
         await MainActor.run {
-            if let idx = forwardings.firstIndex(where: { $0.id == id }) {
-                forwardings[idx].state = .error(stderr)
-            }
+            // 수동 stop은 toggleForwarding이 목록에서 먼저 제거하므로 여기서 id를
+            // 찾았다 = 예기치 못한 사망. 메인 윈도우가 닫힌 메뉴바 상주 앱에서
+            // 사용자가 localhost 접속 실패로 추론하지 않도록 시스템 알림을 보낸다.
+            guard let idx = forwardings.firstIndex(where: { $0.id == id }) else { return }
+            forwardings[idx].state = .error(stderr)
+            let line = display(for: forwardings[idx]).line
+            notifier.post(
+                title: String(localized: "notify.tunnelDied.title", defaultValue: "포워딩이 중단되었습니다"),
+                body: "\(line) — \(SSHErrorSummarizer.summary(for: stderr))"
+            )
         }
     }
 }
